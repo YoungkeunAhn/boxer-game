@@ -1,0 +1,140 @@
+.panel {
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: rgba(23, 28, 40, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #f6bb43;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.description {
+  margin: 7px 0 0;
+  color: #abb3c5;
+  line-height: 1.55;
+}
+
+.badge {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border-radius: 999px;
+  color: #15130d;
+  background: #f6bb43;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.stat {
+  padding: 13px;
+  border-radius: 14px;
+  background: #10141d;
+}
+
+.stat dt {
+  color: #8992a6;
+  font-size: 0.78rem;
+}
+
+.stat dd {
+  margin: 4px 0 0;
+  font-size: 1.18rem;
+  font-weight: 850;
+}
+
+.reward {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  color: #d8dce5;
+  font-weight: 700;
+}
+
+.button {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  color: #15130d;
+  background: linear-gradient(135deg, #ffd66f, #ed9f27);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.chance {
+  margin: 14px 0;
+}
+
+.chanceLabel {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #abb3c5;
+  font-size: 0.86rem;
+}
+
+.chanceTrack {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 99px;
+  background: #0b0e15;
+}
+
+.chanceFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ef8e2e, #f7ca55);
+}
+
+.result {
+  margin: 16px 0 0;
+  padding: 13px;
+  border-radius: 12px;
+  background: rgba(246, 187, 67, 0.1);
+  color: #f7d789;
+  line-height: 1.5;
+}
+
+@media (max-width: 420px) {
+  .panel {
+    padding: 18px;
+  }
+}
+
