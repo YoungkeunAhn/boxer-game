@@ -3,14 +3,22 @@ import { getStageDefinition } from "../data/stages";
 import {
   calculateOfflineProgress,
   createCombatRuntime,
-  resolveAttack,
   resolveBossTimeout,
   retryBoss as createBossRetry,
+  stepCombat,
 } from "../game/combat";
 import { DEFAULT_BOXER_TYPE, DEFAULT_GENDER, INITIAL_UPGRADE_LEVELS } from "../game/constants";
 import { calculateAttackIntervalMs, calculateCombatStats, purchaseUpgrade } from "../game/formulas";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
-import type { Boxer, BoxerType, CombatRuntime, GameState, Gender, UpgradeKey } from "../game/types";
+import type {
+  Boxer,
+  BoxerType,
+  CombatRuntime,
+  GameState,
+  Gender,
+  MonsterAttackResult,
+  UpgradeKey,
+} from "../game/types";
 
 type GameActions = {
   createBoxer: (name: string, boxerType?: BoxerType, gender?: Gender) => void;
@@ -50,6 +58,7 @@ const EMPTY_STATE: GameState = {
   isRunning: false,
   legacySaveDetected: false,
   bossRemainingMs: 0,
+  recentDefense: null,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -160,17 +169,31 @@ export function createGameStore(
 
     const advanceCombat = (now: number) => {
       let { boxer, combat } = get();
-      if (!boxer || !combat) return { killed: false, bossTimedOut: false, bossDefeated: false };
+      if (!boxer || !combat) {
+        return { killed: false, bossTimedOut: false, bossDefeated: false, knockedDown: false };
+      }
 
       let lastAttack = get().lastAttack;
+      let recentDefense: MonsterAttackResult | null = get().recentDefense;
       let killed = false;
       let bossTimedOut = false;
       let bossDefeated = false;
+      let knockedDown = false;
 
-      while (combat.nextAttackAt <= now) {
+      // 복서 공격·몬스터 공격·보스 타임아웃 중 now까지 도달한 이벤트를 시간순으로 인터리브한다.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const boxerDue = combat.nextAttackAt <= now;
+        const monsterDue = combat.nextMonsterAttackAt <= now;
+        if (!boxerDue && !monsterDue) break;
+
+        const nextEventAt = Math.min(
+          boxerDue ? combat.nextAttackAt : Number.POSITIVE_INFINITY,
+          monsterDue ? combat.nextMonsterAttackAt : Number.POSITIVE_INFINITY,
+        );
         if (
           combat.bossDeadlineAt !== null &&
-          combat.nextAttackAt > combat.bossDeadlineAt
+          nextEventAt > combat.bossDeadlineAt
         ) {
           combat = resolveBossTimeout(boxer, combat, combat.bossDeadlineAt + 1);
           bossTimedOut = true;
@@ -178,7 +201,7 @@ export function createGameStore(
         }
 
         const attackedStageWasBoss = getStageDefinition(combat.position).isBoss;
-        const step = resolveAttack(boxer, combat, dependencies.random(), combat.nextAttackAt);
+        const step = stepCombat(boxer, combat, dependencies.random(), now);
         boxer = step.boxer;
         combat = step.combat;
         if (step.attack) {
@@ -186,7 +209,9 @@ export function createGameStore(
           killed ||= step.attack.killed;
           bossDefeated ||= attackedStageWasBoss && step.attack.killed;
         }
+        if (step.monsterAttack) recentDefense = step.monsterAttack;
         bossTimedOut ||= step.bossTimedOut;
+        knockedDown ||= step.knockedDown;
       }
 
       if (combat.bossDeadlineAt !== null && now > combat.bossDeadlineAt) {
@@ -201,14 +226,17 @@ export function createGameStore(
         boxer,
         combat,
         lastAttack,
+        recentDefense,
         bossRemainingMs: getBossRemainingMs(combat, now),
-        message: bossTimedOut
-          ? "보스 공략에 실패했습니다. 직전 스테이지에서 골드를 모아 다시 도전하세요."
-          : bossDefeated
-            ? "보스를 쓰러뜨렸습니다! 다음 챕터로 이동합니다."
-            : get().message,
+        message: knockedDown
+          ? "KNOCK DOWN"
+          : bossTimedOut
+            ? "보스 공략에 실패했습니다. 직전 스테이지에서 골드를 모아 다시 도전하세요."
+            : bossDefeated
+              ? "보스를 쓰러뜨렸습니다! 다음 챕터로 이동합니다."
+              : get().message,
       });
-      return { killed, bossTimedOut, bossDefeated };
+      return { killed, bossTimedOut, bossDefeated, knockedDown };
     };
 
     const scheduleNext = () => {
@@ -219,11 +247,15 @@ export function createGameStore(
       const timeoutAt = state.combat.bossDeadlineAt === null
         ? Number.POSITIVE_INFINITY
         : state.combat.bossDeadlineAt + 1;
-      const dueAt = Math.min(state.combat.nextAttackAt, timeoutAt);
+      const dueAt = Math.min(
+        state.combat.nextAttackAt,
+        state.combat.nextMonsterAttackAt,
+        timeoutAt,
+      );
       timerHandle = dependencies.schedule(() => {
         timerHandle = null;
         const result = advanceCombat(dependencies.now());
-        if (result.bossTimedOut || result.bossDefeated) persist(true);
+        if (result.bossTimedOut || result.bossDefeated || result.knockedDown) persist(true);
         else if (result.killed) persist(false);
         scheduleNext();
       }, Math.max(0, dueAt - now));
@@ -257,12 +289,17 @@ export function createGameStore(
         const result = purchaseUpgrade(state.boxer, key);
         if (!result.purchased) return;
         const now = dependencies.now();
-        const stats = calculateCombatStats(result.boxer.upgradeLevels);
+        const stats = calculateCombatStats(result.boxer.upgradeLevels, result.boxer.boxerType);
+        // 가정: 체력 강화 시 최대 HP가 늘어난 만큼 현재 HP도 가산(풀충전 아님). 현재 HP는 새 최대치 클램프.
+        const hpDelta = Math.max(0, stats.maxHp - state.combat.boxerMaxHp);
+        const boxerHp = Math.min(stats.maxHp, state.combat.boxerHp + hpDelta);
         set({
           boxer: result.boxer,
           combat: {
             ...state.combat,
             nextAttackAt: now + calculateAttackIntervalMs(stats.attackSpeed),
+            boxerHp,
+            boxerMaxHp: stats.maxHp,
           },
           message: `강화 완료! ${result.cost.toLocaleString()} 골드를 사용했습니다.`,
         });

@@ -32,6 +32,26 @@ const UPGRADE_LABELS: Record<UpgradeKey, { name: string; value: (boxer: Boxer) =
     name: "골드 보너스",
     value: (boxer) => `+${Math.round(calculateCombatStats(boxer.upgradeLevels).goldBonus * 100)}%`,
   },
+  maxHp: {
+    name: "체력",
+    value: (boxer) =>
+      calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).maxHp.toLocaleString(),
+  },
+  defense: {
+    name: "방어",
+    value: (boxer) =>
+      calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).defense.toLocaleString(),
+  },
+  dodge: {
+    name: "회피",
+    value: (boxer) =>
+      `${Math.round(calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).dodge * 100)}%`,
+  },
+  counter: {
+    name: "카운터",
+    value: (boxer) =>
+      `${calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).counter.toFixed(2)}배`,
+  },
 };
 
 export function UpgradePanel({ boxer }: UpgradePanelProps) {

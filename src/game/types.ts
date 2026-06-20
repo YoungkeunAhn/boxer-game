@@ -4,6 +4,12 @@ export type CombatStats = {
   critRate: number;
   critDamage: number;
   goldBonus: number;
+  // v1.2a: 복서 HP·방어.
+  maxHp: number;
+  defense: number;
+  // v1.2b: 회피율(0~1)·카운터 성능 계수.
+  dodge: number;
+  counter: number;
 };
 
 export type UpgradeLevels = {
@@ -12,14 +18,18 @@ export type UpgradeLevels = {
   critRate: number;
   critDamage: number;
   goldBonus: number;
+  // v1.2a: 체력·방어 강화.
+  maxHp: number;
+  defense: number;
+  // v1.2b: 회피·카운터 강화.
+  dodge: number;
+  counter: number;
 };
 
 export type UpgradeKey = keyof UpgradeLevels;
 
-// 전투 스타일 타입. 전투 성능 차이는 전적으로 타입이 결정한다(docs/기획/boxer/types.md).
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 
-// 성별은 외형·모션 식별자 전용이며 전투 성능에는 영향을 주지 않는다(docs/기획/boxer/gender.md).
 export type Gender = "MALE" | "FEMALE";
 
 export type Boxer = {
@@ -54,6 +64,11 @@ export type CombatRuntime = {
   bossDeadlineAt: number | null;
   nextAttackAt: number;
   isFarming: boolean;
+  // v1.2a 런타임 전용(저장 안 함).
+  boxerHp: number;
+  boxerMaxHp: number;
+  nextMonsterAttackAt: number;
+  monsterAttackPrep: { dueAt: number } | null;
 };
 
 export type AttackResult = {
@@ -64,11 +79,23 @@ export type AttackResult = {
   goldReward: number;
 };
 
+// v1.2b: 몬스터 공격 한 번에 대한 복서 방어 결과 분류.
+export type DefenseOutcome = "HIT" | "GUARD" | "MISS" | "COUNTER";
+
+// v1.2a/v1.2b: 몬스터 공격 한 번의 결과.
+export type MonsterAttackResult = {
+  outcome: DefenseOutcome;
+  damage: number;
+  counterDamage: number;
+};
+
 export type CombatStepResult = {
   boxer: Boxer;
   combat: CombatRuntime;
   attack: AttackResult | null;
   bossTimedOut: boolean;
+  monsterAttack: MonsterAttackResult | null;
+  knockedDown: boolean;
 };
 
 export type OfflineProgress = {
@@ -89,6 +116,8 @@ export type GameState = {
   isRunning: boolean;
   bossRemainingMs: number;
   legacySaveDetected: boolean;
+  // v1.2b: 최근 몬스터 공격에 대한 방어 결과(UI 연출용).
+  recentDefense: MonsterAttackResult | null;
 };
 
 export type SaveDataV2 = {
@@ -100,7 +129,7 @@ export type SaveDataV2 = {
   isFarming: boolean;
 };
 
-// v3: 복서에 타입·성별이 추가됨(schemaVersion 3). 형식은 v2와 동일하되 boxer가 확장된다.
 export type SaveDataV3 = SaveDataV2;
-
-export type SaveData = SaveDataV3;
+export type SaveDataV4 = SaveDataV3;
+export type SaveDataV5 = SaveDataV4;
+export type SaveData = SaveDataV5;
