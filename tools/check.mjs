@@ -186,9 +186,9 @@ function runTask(task) {
 
 function detectChangedPaths() {
   const commands = [
-    ["diff", "--name-only", "--diff-filter=ACMR"],
-    ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-    ["ls-files", "--others", "--exclude-standard"],
+    ["-c", "core.quotepath=false", "diff", "--name-only", "--diff-filter=ACMR"],
+    ["-c", "core.quotepath=false", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+    ["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"],
   ];
   const detected = [];
 
@@ -230,6 +230,7 @@ function requiresFullCheck(filePath) {
     filePath === "package.json" ||
     filePath === "package-lock.json" ||
     filePath === "vite.config.ts" ||
+    filePath === "vitest.config.ts" ||
     filePath.startsWith("tsconfig") ||
     filePath === "tools/check.mjs"
   );

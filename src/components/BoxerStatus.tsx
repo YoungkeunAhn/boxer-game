@@ -1,4 +1,4 @@
-import { calculateCombatPower } from "../game/formulas";
+import { calculateCombatStats } from "../game/formulas";
 import type { Boxer } from "../game/types";
 import styles from "./GamePanel.module.css";
 
@@ -6,15 +6,8 @@ type BoxerStatusProps = {
   boxer: Boxer;
 };
 
-const STAT_LABELS = {
-  health: "체력",
-  attack: "공격력",
-  defense: "방어력",
-  speed: "스피드",
-} as const;
-
 export function BoxerStatus({ boxer }: BoxerStatusProps) {
-  const combatPower = calculateCombatPower(boxer.stats);
+  const stats = calculateCombatStats(boxer.upgradeLevels);
 
   return (
     <section className={styles.panel} aria-labelledby="boxer-status-title">
@@ -25,31 +18,35 @@ export function BoxerStatus({ boxer }: BoxerStatusProps) {
             {boxer.name}
           </h2>
         </div>
-        <span className={styles.badge}>Lv. {boxer.level}</span>
+        <span className={styles.badge}>{boxer.gold.toLocaleString()} G</span>
       </div>
 
       <dl className={styles.stats}>
-        {Object.entries(boxer.stats).map(([key, value]) => (
-          <div className={styles.stat} key={key}>
-            <dt>{STAT_LABELS[key as keyof typeof STAT_LABELS]}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
         <div className={styles.stat}>
-          <dt>전투력</dt>
-          <dd>{combatPower.toFixed(1)}</dd>
+          <dt>공격력</dt>
+          <dd data-testid="stat-attackPower">{stats.attackPower.toLocaleString()}</dd>
         </div>
         <div className={styles.stat}>
-          <dt>전적</dt>
-          <dd>{boxer.defeatedOpponentIds.length}승</dd>
+          <dt>공격속도</dt>
+          <dd data-testid="stat-attackSpeed">{stats.attackSpeed.toFixed(1)}회/초</dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>치명타율</dt>
+          <dd data-testid="stat-critRate">{Math.round(stats.critRate * 100)}%</dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>치명타 피해</dt>
+          <dd data-testid="stat-critDamage">{stats.critDamage.toFixed(1)}배</dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>골드 보너스</dt>
+          <dd data-testid="stat-goldBonus">+{Math.round(stats.goldBonus * 100)}%</dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>총 처치</dt>
+          <dd data-testid="stat-totalKills">{boxer.totalKills.toLocaleString()}마리</dd>
         </div>
       </dl>
-
-      <div className={styles.reward} aria-label="보유 재화">
-        <span>💰 {boxer.money.toLocaleString()}원</span>
-        <span>★ 명성 {boxer.fame.toLocaleString()}</span>
-      </div>
     </section>
   );
 }
-

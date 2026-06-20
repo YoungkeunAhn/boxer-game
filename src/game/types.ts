@@ -1,61 +1,95 @@
-export type Stats = {
-  health: number;
-  attack: number;
-  defense: number;
-  speed: number;
+export type CombatStats = {
+  attackPower: number;
+  attackSpeed: number;
+  critRate: number;
+  critDamage: number;
+  goldBonus: number;
 };
 
-export type StatKey = keyof Stats;
-
-export type Reward = {
-  money: number;
-  fame: number;
+export type UpgradeLevels = {
+  attackPower: number;
+  attackSpeed: number;
+  critRate: number;
+  critDamage: number;
+  goldBonus: number;
 };
+
+export type UpgradeKey = keyof UpgradeLevels;
 
 export type Boxer = {
   id: string;
   name: string;
-  level: number;
-  stats: Stats;
-  money: number;
-  fame: number;
-  defeatedOpponentIds: string[];
+  gold: number;
+  totalKills: number;
+  upgradeLevels: UpgradeLevels;
 };
 
-export type Training = {
+export type StagePosition = {
+  chapter: number;
+  stage: number;
+};
+
+export type StageDefinition = StagePosition & {
   id: string;
-  name: string;
-  description: string;
-  statGains: Partial<Stats>;
+  themeId: string;
+  chapterName: string;
+  monsterName: string;
+  isBoss: boolean;
+  maxHp: number;
+  goldReward: number;
+  bossTimeLimitMs: number | null;
 };
 
-export type Opponent = {
-  id: string;
-  name: string;
-  description: string;
-  stats: Stats;
-  reward: Reward;
+export type CombatRuntime = {
+  position: StagePosition;
+  monsterHp: number;
+  bossDeadlineAt: number | null;
+  nextAttackAt: number;
+  isFarming: boolean;
 };
 
-export type BattleResult = {
-  opponentId: string;
-  opponentName: string;
-  won: boolean;
-  winChance: number;
-  reward: Reward;
-  isFirstWin: boolean;
+export type AttackResult = {
+  stageId: string;
+  damage: number;
+  isCritical: boolean;
+  killed: boolean;
+  goldReward: number;
+};
+
+export type CombatStepResult = {
+  boxer: Boxer;
+  combat: CombatRuntime;
+  attack: AttackResult | null;
+  bossTimedOut: boolean;
+};
+
+export type OfflineProgress = {
+  boxer: Boxer;
+  position: StagePosition;
+  elapsedMs: number;
+  kills: number;
+  gold: number;
 };
 
 export type GameState = {
   boxer: Boxer | null;
-  lastBattleResult: BattleResult | null;
+  combat: CombatRuntime | null;
+  lastAttack: AttackResult | null;
+  offlineSummary: OfflineProgress | null;
   message: string | null;
+  storageWarning: string | null;
+  isRunning: boolean;
+  bossRemainingMs: number;
+  legacySaveDetected: boolean;
 };
 
-export type SaveData = {
+export type SaveDataV2 = {
   schemaVersion: number;
   balanceVersion: number;
   savedAt: string;
   boxer: Boxer;
+  position: StagePosition;
+  isFarming: boolean;
 };
 
+export type SaveData = SaveDataV2;

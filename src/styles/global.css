@@ -24,11 +24,24 @@ html {
 body {
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+#root {
+  min-width: 0;
+  max-width: 100%;
 }
 
 button,
 input {
+  min-height: 44px;
+  max-width: 100%;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -37,4 +50,3 @@ input:focus-visible {
   outline: 3px solid rgba(246, 187, 67, 0.55);
   outline-offset: 2px;
 }
-

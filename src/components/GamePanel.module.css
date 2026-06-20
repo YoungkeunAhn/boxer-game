@@ -1,4 +1,5 @@
 .panel {
+  min-width: 0;
   padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
@@ -14,6 +15,10 @@
   margin-bottom: 18px;
 }
 
+.headingRow > * {
+  min-width: 0;
+}
+
 .eyebrow {
   margin: 0 0 5px;
   color: #f6bb43;
@@ -26,22 +31,32 @@
 .title {
   margin: 0;
   font-size: 1.3rem;
+  overflow-wrap: anywhere;
 }
 
 .description {
   margin: 7px 0 0;
   color: #abb3c5;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .badge {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-width: 100%;
   padding: 8px 11px;
   border-radius: 999px;
   color: #15130d;
   background: #f6bb43;
   font-size: 0.8rem;
   font-weight: 900;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.bossBadge {
+  color: #fff5f1;
+  background: linear-gradient(135deg, #da553b, #9f2e2e);
 }
 
 .stats {
@@ -66,14 +81,7 @@
   margin: 4px 0 0;
   font-size: 1.18rem;
   font-weight: 850;
-}
-
-.reward {
-  display: flex;
-  gap: 12px;
-  margin: 16px 0;
-  color: #d8dce5;
-  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .button {
@@ -89,38 +97,132 @@
   transition: transform 150ms ease, filter 150ms ease;
 }
 
-.button:hover {
+.button:not(:disabled):hover {
   filter: brightness(1.05);
   transform: translateY(-1px);
 }
 
-.button:active {
+.button:not(:disabled):active {
   transform: translateY(1px);
 }
 
-.chance {
+.button:disabled {
+  color: #767164;
+  background: #c7b98f;
+  cursor: wait;
+  filter: saturate(0.45);
+}
+
+.health {
   margin: 14px 0;
 }
 
-.chanceLabel {
+.healthLabel {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
   color: #abb3c5;
   font-size: 0.86rem;
 }
 
-.chanceTrack {
+.healthLabel strong {
+  min-width: 0;
+  color: #f3f5f9;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.healthTrack {
   overflow: hidden;
-  height: 8px;
+  height: 12px;
   border-radius: 99px;
   background: #0b0e15;
 }
 
-.chanceFill {
+.healthFill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #ef8e2e, #f7ca55);
+  background: linear-gradient(90deg, #d73c36, #f07b49);
+  transition: width 130ms linear;
+}
+
+.combatMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 14px 0;
+  color: #abb3c5;
+  font-size: 0.88rem;
+}
+
+.combatMeta strong {
+  color: #ff866e;
+  font-variant-numeric: tabular-nums;
+}
+
+.critical {
+  color: #ffd66f;
+  font-weight: 900;
+}
+
+.upgradeList {
+  display: grid;
+  gap: 9px;
+}
+
+.upgradeRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #10141d;
+}
+
+.upgradeRow > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.upgradeRow strong,
+.upgradeRow span {
+  overflow-wrap: anywhere;
+}
+
+.upgradeRow span {
+  line-height: 1.4;
+}
+
+.upgradeRow small,
+.upgradeRow span {
+  color: #929bad;
+  font-size: 0.78rem;
+}
+
+.upgradeButton {
+  flex: 0 0 auto;
+  min-width: 88px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  color: #15130d;
+  background: #f6bb43;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.upgradeButton:disabled {
+  color: #7e8188;
+  background: #2b303b;
+  cursor: not-allowed;
 }
 
 .result {
@@ -130,11 +232,28 @@
   background: rgba(246, 187, 67, 0.1);
   color: #f7d789;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 420px) {
   .panel {
     padding: 18px;
   }
-}
 
+  .headingRow {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .badge {
+    align-self: flex-start;
+  }
+
+  .upgradeRow {
+    align-items: stretch;
+  }
+
+  .upgradeButton {
+    min-width: 84px;
+  }
+}

@@ -1,14 +1,35 @@
-import type { Boxer, GameState, SaveData, Stats } from "./types";
+import { getStageDefinition } from "../data/stages";
+import { BALANCE_VERSION, SCHEMA_VERSION, UPGRADE_MAX_LEVELS } from "./constants";
+import type { Boxer, SaveDataV2, StagePosition, UpgradeKey, UpgradeLevels } from "./types";
 
-export const SAVE_KEY = "boxer-game.save.v1";
+export const SAVE_KEY = "boxer-game.save.v2";
+export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 const TEMP_SAVE_KEY = `${SAVE_KEY}.temp`;
-export const SCHEMA_VERSION = 1;
-export const BALANCE_VERSION = 1;
 
-export type StorageAdapter = Pick<
-  Storage,
-  "getItem" | "setItem" | "removeItem"
->;
+export { BALANCE_VERSION, SCHEMA_VERSION } from "./constants";
+
+export type StorageAdapter = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export type SaveSnapshot = {
+  boxer: Boxer;
+  position: StagePosition;
+  isFarming: boolean;
+};
+
+export type LoadGameResult =
+  | { status: "loaded"; data: SaveDataV2 }
+  | { status: "empty" }
+  | { status: "legacy" }
+  | { status: "invalid" }
+  | { status: "unavailable" };
+
+const UPGRADE_KEYS: UpgradeKey[] = [
+  "attackPower",
+  "attackSpeed",
+  "critRate",
+  "critDamage",
+  "goldBonus",
+];
 
 function getBrowserStorage(): StorageAdapter | null {
   try {
@@ -18,64 +39,94 @@ function getBrowserStorage(): StorageAdapter | null {
   }
 }
 
-function isFiniteNonNegativeNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function isSafeNonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function isStats(value: unknown): value is Stats {
+function isUpgradeLevels(value: unknown): value is UpgradeLevels {
   if (typeof value !== "object" || value === null) return false;
-  const stats = value as Record<string, unknown>;
-  return ["health", "attack", "defense", "speed"].every((key) =>
-    isFiniteNonNegativeNumber(stats[key]),
-  );
+  const levels = value as Record<string, unknown>;
+  return UPGRADE_KEYS.every((key) => {
+    const level = levels[key];
+    const max = UPGRADE_MAX_LEVELS[key];
+    return isSafeNonNegativeInteger(level) && (max === null || level <= max);
+  });
 }
 
 function isBoxer(value: unknown): value is Boxer {
   if (typeof value !== "object" || value === null) return false;
   const boxer = value as Record<string, unknown>;
-
   return (
     typeof boxer.id === "string" &&
+    boxer.id.length > 0 &&
     typeof boxer.name === "string" &&
     boxer.name.trim().length > 0 &&
-    isFiniteNonNegativeNumber(boxer.level) &&
-    isStats(boxer.stats) &&
-    isFiniteNonNegativeNumber(boxer.money) &&
-    isFiniteNonNegativeNumber(boxer.fame) &&
-    Array.isArray(boxer.defeatedOpponentIds) &&
-    boxer.defeatedOpponentIds.every((id) => typeof id === "string")
+    boxer.name.trim().length <= 16 &&
+    isSafeNonNegativeInteger(boxer.gold) &&
+    isSafeNonNegativeInteger(boxer.totalKills) &&
+    isUpgradeLevels(boxer.upgradeLevels)
   );
 }
 
-function isSaveData(value: unknown): value is SaveData {
+function isStagePosition(value: unknown): value is StagePosition {
+  if (typeof value !== "object" || value === null) return false;
+  const position = value as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(position.chapter) ||
+    (position.chapter as number) < 1 ||
+    !Number.isSafeInteger(position.stage) ||
+    (position.stage as number) < 1
+  ) return false;
+
+  try {
+    getStageDefinition(position as StagePosition);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSaveData(value: unknown): value is SaveDataV2 {
   if (typeof value !== "object" || value === null) return false;
   const save = value as Record<string, unknown>;
-
   return (
     save.schemaVersion === SCHEMA_VERSION &&
-    isFiniteNonNegativeNumber(save.balanceVersion) &&
+    save.balanceVersion === BALANCE_VERSION &&
     typeof save.savedAt === "string" &&
     !Number.isNaN(Date.parse(save.savedAt)) &&
-    isBoxer(save.boxer)
+    isBoxer(save.boxer) &&
+    isStagePosition(save.position) &&
+    typeof save.isFarming === "boolean" &&
+    (!save.isFarming || save.position.stage === 4)
   );
 }
 
 export function saveGame(
-  state: GameState,
+  snapshot: SaveSnapshot,
   storage: StorageAdapter | null = getBrowserStorage(),
   now: Date = new Date(),
 ): boolean {
-  if (!storage || !state.boxer) return false;
+  if (
+    !storage ||
+    !isBoxer(snapshot.boxer) ||
+    !isStagePosition(snapshot.position) ||
+    typeof snapshot.isFarming !== "boolean" ||
+    (snapshot.isFarming && snapshot.position.stage !== 4)
+  ) {
+    return false;
+  }
 
-  const saveData: SaveData = {
+  const data: SaveDataV2 = {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
     savedAt: now.toISOString(),
-    boxer: state.boxer,
+    boxer: snapshot.boxer,
+    position: snapshot.position,
+    isFarming: snapshot.isFarming,
   };
 
   try {
-    const serialized = JSON.stringify(saveData);
+    const serialized = JSON.stringify(data);
     storage.setItem(TEMP_SAVE_KEY, serialized);
     storage.setItem(SAVE_KEY, serialized);
     storage.removeItem(TEMP_SAVE_KEY);
@@ -87,22 +138,21 @@ export function saveGame(
 
 export function loadGame(
   storage: StorageAdapter | null = getBrowserStorage(),
-): GameState | null {
-  if (!storage) return null;
+): LoadGameResult {
+  if (!storage) return { status: "unavailable" };
 
   try {
     const serialized = storage.getItem(SAVE_KEY);
-    if (!serialized) return null;
-    const parsed: unknown = JSON.parse(serialized);
-    if (!isSaveData(parsed)) return null;
+    if (serialized === null) {
+      return storage.getItem(LEGACY_SAVE_KEY) === null
+        ? { status: "empty" }
+        : { status: "legacy" };
+    }
 
-    return {
-      boxer: parsed.boxer,
-      lastBattleResult: null,
-      message: "저장된 복서를 불러왔습니다.",
-    };
-  } catch {
-    return null;
+    const parsed: unknown = JSON.parse(serialized);
+    return isSaveData(parsed) ? { status: "loaded", data: parsed } : { status: "invalid" };
+  } catch (error) {
+    return error instanceof SyntaxError ? { status: "invalid" } : { status: "unavailable" };
   }
 }
 
@@ -110,13 +160,11 @@ export function clearGame(
   storage: StorageAdapter | null = getBrowserStorage(),
 ): boolean {
   if (!storage) return false;
-
   try {
-    storage.removeItem(SAVE_KEY);
     storage.removeItem(TEMP_SAVE_KEY);
+    storage.removeItem(SAVE_KEY);
     return true;
   } catch {
     return false;
   }
 }
-

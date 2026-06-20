@@ -3,4 +3,12 @@ dist/
 .vite/
 coverage/
 *.local
+.claude/settings.local.json
 
+.granite
+*.ait
+
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
