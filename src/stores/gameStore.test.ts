@@ -89,7 +89,9 @@ describe("자동 전투 게임 스토어", () => {
     clock.advanceTo(999);
     expect(store.getState().combat?.monsterHp).toBe(30);
     clock.advanceTo(1_000);
-    expect(store.getState().combat?.monsterHp).toBe(20);
+    // 첫 공격은 잽 한 종류 → floor(공격력 10 × 계수 0.3) = 3 피해.
+    expect(store.getState().combat?.monsterHp).toBe(27);
+    expect(store.getState().lastAttack).toMatchObject({ attackType: "JAB", hand: "LEFT" });
     expect(clock.timers.size).toBe(1);
   });
 

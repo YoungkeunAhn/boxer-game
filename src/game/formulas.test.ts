@@ -5,8 +5,11 @@ import {
 } from "./constants";
 import type { Boxer, CombatStats, UpgradeLevels } from "./types";
 import {
+  attackAnimationKey,
   calculateAttackDamage,
+  calculateAttackDps,
   calculateAttackIntervalMs,
+  calculateBasicAttackDamage,
   calculateCombatStats,
   calculateCounterDamage,
   calculateDamageReduction,
@@ -198,6 +201,35 @@ describe("자동 전투 수식", () => {
         counter: 1,
       }),
     ).toBe(15);
+  });
+
+  it("공격별 데미지 계수(잽<스트레이트<훅<어퍼)를 곱하고 치명타를 재사용한다", () => {
+    const stats = calculateCombatStats(zeroLevels); // 공격력 10, 치명타율 0.05, 치명타 2배.
+    // 비치명타(random ≥ 0.05): floor(10 × 계수).
+    expect(calculateBasicAttackDamage(stats, "JAB", 0.5).damage).toBe(3);
+    expect(calculateBasicAttackDamage(stats, "STRAIGHT", 0.5).damage).toBe(15);
+    expect(calculateBasicAttackDamage(stats, "HOOK", 0.5).damage).toBe(20);
+    expect(calculateBasicAttackDamage(stats, "UPPER", 0.5).damage).toBe(30);
+    // 치명타(random < 0.05): 계수 × 치명타 배수.
+    expect(calculateBasicAttackDamage(stats, "UPPER", 0.0)).toEqual({
+      damage: 60,
+      isCritical: true,
+    });
+    expect(() => calculateBasicAttackDamage(stats, "JAB", 1)).toThrow(RangeError);
+  });
+
+  it("평균 DPS는 계수 가중합 1.0으로 기존 단일 공격(공격력×attackSpeed×기대배수)과 동일하다", () => {
+    const stats = calculateCombatStats(zeroLevels);
+    // expectedHit 10.5 × attackSpeed 1 × Σ(계수/쿨타임초)=1.0 = 10.5.
+    expect(calculateAttackDps(stats)).toBeCloseTo(calculateExpectedHitDamage(stats) * stats.attackSpeed, 6);
+    expect(calculateAttackDps(stats)).toBeCloseTo(10.5, 6);
+  });
+
+  it("애니메이션 키 매핑 규약을 노출한다", () => {
+    expect(attackAnimationKey("JAB", "LEFT")).toBe("boxer_left_jab");
+    expect(attackAnimationKey("STRAIGHT", "RIGHT")).toBe("boxer_right_straight");
+    expect(attackAnimationKey("HOOK", "LEFT")).toBe("boxer_left_hook");
+    expect(attackAnimationKey("UPPER", "RIGHT")).toBe("boxer_right_upper");
   });
 
   it("강화 비용을 올림하고 구매 시 원본을 변경하지 않는다", () => {

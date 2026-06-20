@@ -7,10 +7,12 @@ import {
   resolveBossTimeout,
   resolveMonsterAttack,
   retryBoss,
+  selectAttackType,
+  selectHand,
   stepCombat,
 } from "./combat";
 import { calculateCombatStats } from "./formulas";
-import type { Boxer, UpgradeLevels } from "./types";
+import type { AttackType, Boxer, UpgradeLevels } from "./types";
 
 const zeroLevels: UpgradeLevels = {
   attackPower: 0,
@@ -47,12 +49,18 @@ describe("자동 전투", () => {
   });
 
   it("일반 몬스터 처치 시 보상을 한 번 지급하고 다음 스테이지로 간다", () => {
+    // t=1000에는 잽만 ready → 잽 데미지 floor(10×0.3)=3. HP 3으로 두어 한 방에 처치한다.
     const combat = {
       ...createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0),
-      monsterHp: 10,
+      monsterHp: 3,
     };
     const outcome = resolveAttack(boxer, combat, 0.5, 1_000);
-    expect(outcome.attack).toMatchObject({ killed: true, goldReward: 5 });
+    expect(outcome.attack).toMatchObject({
+      killed: true,
+      goldReward: 5,
+      attackType: "JAB",
+      hand: "LEFT",
+    });
     expect(outcome.boxer).toMatchObject({ gold: 5, totalKills: 1 });
     expect(outcome.combat.position).toEqual({ chapter: 1, stage: 2 });
     expect(boxer).toMatchObject({ gold: 0, totalKills: 0 });
@@ -61,7 +69,7 @@ describe("자동 전투", () => {
   it("파밍 중에는 처치 후 같은 일반 스테이지를 반복한다", () => {
     const combat = {
       ...createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0, true),
-      monsterHp: 10,
+      monsterHp: 3,
     };
     const outcome = resolveAttack(boxer, combat, 0.5, 1_000);
     expect(outcome.combat.position).toEqual({ chapter: 1, stage: 4 });
@@ -103,6 +111,77 @@ describe("자동 전투", () => {
     expect(boss.position).toEqual({ chapter: 3, stage: 5 });
     expect(boss.bossDeadlineAt).toBe(35_000);
     expect(boss.isFarming).toBe(false);
+  });
+});
+
+describe("기본 공격 4종·손·쿨타임", () => {
+  it("ready 공격 중 우선순위(어퍼>훅>스트레이트>잽)대로 고른다", () => {
+    const now = 100_000;
+    const all = { JAB: 0, STRAIGHT: 0, HOOK: 0, UPPER: 0 };
+    expect(selectAttackType(all, now)).toBe("UPPER");
+    expect(selectAttackType({ ...all, UPPER: now + 1 }, now)).toBe("HOOK");
+    expect(selectAttackType({ ...all, UPPER: now + 1, HOOK: now + 1 }, now)).toBe("STRAIGHT");
+    // 잽만 ready.
+    expect(
+      selectAttackType({ JAB: now, STRAIGHT: now + 1, HOOK: now + 1, UPPER: now + 1 }, now),
+    ).toBe("JAB");
+  });
+
+  it("손 규칙: 잽=왼손·스트레이트=오른손 고정, 훅·어퍼는 직전과 반대 손", () => {
+    expect(selectHand("JAB", "RIGHT")).toBe("LEFT");
+    expect(selectHand("STRAIGHT", "LEFT")).toBe("RIGHT");
+    expect(selectHand("HOOK", "LEFT")).toBe("RIGHT");
+    expect(selectHand("HOOK", "RIGHT")).toBe("LEFT");
+    expect(selectHand("UPPER", null)).toBe("LEFT");
+    expect(selectHand("HOOK", null)).toBe("LEFT");
+  });
+
+  it("잽이 가장 자주, 어퍼가 가장 드물게 발동한다(30초 결정적 시뮬레이션)", () => {
+    // 처치되지 않도록 HP를 크게 두고, 치명타가 없도록 random=0.99 고정.
+    let combat = { ...createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0), monsterHp: 1_000_000 };
+    const counts: Record<AttackType, number> = { JAB: 0, STRAIGHT: 0, HOOK: 0, UPPER: 0 };
+    while (combat.nextAttackAt <= 30_000) {
+      const step = resolveAttack(boxer, combat, 0.99, combat.nextAttackAt);
+      if (step.attack) counts[step.attack.attackType] += 1;
+      combat = step.combat;
+    }
+    expect(counts).toEqual({ JAB: 30, STRAIGHT: 6, HOOK: 3, UPPER: 2 });
+    expect(counts.JAB).toBeGreaterThan(counts.STRAIGHT);
+    expect(counts.STRAIGHT).toBeGreaterThan(counts.HOOK);
+    expect(counts.HOOK).toBeGreaterThan(counts.UPPER);
+  });
+
+  it("공격별 데미지 계수가 잽<스트레이트<훅<어퍼 순이고 손이 교대된다", () => {
+    let combat = { ...createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0), monsterHp: 1_000_000 };
+    const damageByType: Partial<Record<AttackType, number>> = {};
+    let hookHand: string | undefined;
+    let upperHand: string | undefined;
+    while (combat.nextAttackAt <= 30_000) {
+      const step = resolveAttack(boxer, combat, 0.99, combat.nextAttackAt);
+      if (step.attack) {
+        damageByType[step.attack.attackType] ??= step.attack.damage;
+        if (step.attack.attackType === "HOOK") hookHand ??= step.attack.hand;
+        if (step.attack.attackType === "UPPER") upperHand ??= step.attack.hand;
+      }
+      combat = step.combat;
+    }
+    // 공격력 10 기준: 잽 3, 스트레이트 15, 훅 20, 어퍼 30.
+    expect(damageByType.JAB).toBe(3);
+    expect(damageByType.STRAIGHT).toBe(15);
+    expect(damageByType.HOOK).toBe(20);
+    expect(damageByType.UPPER).toBe(30);
+    // 쿨타임 사이를 잽(왼손)이 채우므로 훅·어퍼 직전 손은 잽의 왼손 → 반대 손(오른손)을 고른다.
+    expect(hookHand).toBe("RIGHT");
+    expect(upperHand).toBe("RIGHT");
+  });
+
+  it("처치·골드 정산은 어떤 공격으로 처치하든 동일하다(어퍼 한 방 처치)", () => {
+    // t=15000에는 어퍼가 ready(우선순위 최상) → 어퍼로 처치. 보상은 잽 처치와 동일하게 1회·계수 무관.
+    const combat = { ...createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0), monsterHp: 5 };
+    const outcome = resolveAttack(boxer, combat, 0.99, 15_000);
+    expect(outcome.attack?.attackType).toBe("UPPER");
+    expect(outcome.attack).toMatchObject({ killed: true, goldReward: 15 });
+    expect(outcome.boxer).toMatchObject({ gold: 15, totalKills: 1 });
   });
 });
 

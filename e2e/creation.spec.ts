@@ -71,7 +71,7 @@ test.describe("생성과 자동 전투", () => {
   });
 
   test("공격 버튼을 누르지 않아도 공격 주기마다 몬스터 HP가 감소한다", async ({ page }) => {
-    // 1-3(68HP)은 2타(치명타 포함 최대 40)로 죽지 않아 연속 감소를 결정적으로 관찰할 수 있다.
+    // 1-3(68HP)은 잽(1초 쿨타임, 계수 0.3 → 3피해)만으로 두 번 쳐도 죽지 않아 연속 감소를 관찰할 수 있다.
     await seedSave(page, { chapter: 1, stage: 3 });
     await gotoFrozen(page);
     const max = await hpMax(page);
@@ -98,8 +98,9 @@ test.describe("생성과 자동 전투", () => {
   test("몬스터 처치 시 골드와 총 처치 수가 늘고 다음 스테이지로 이동한다", async ({ page }) => {
     await gotoFrozen(page);
     await createBoxer(page);
-    // 1-1(30HP)은 t=3000(3타) 안에 반드시 처치, 1-2(45HP)는 t=3000까지 죽지 않음 → 정확히 1처치.
-    await page.clock.runFor(3_000);
+    // 4종 쿨타임상 1-1(30HP)은 t=5000(잽 5타 15 + 스트레이트 15)에 처치되고, 1-2(45HP)는
+    // t=7000까지 잽만으로는 죽지 않는다 → 창을 7초로 잡아 정확히 1처치를 보장한다.
+    await page.clock.runFor(7_000);
 
     await expect(page.getByText("CHAPTER 1 · STAGE 2")).toBeVisible();
     await expect(statValue(page, "totalKills")).toHaveText("1마리");

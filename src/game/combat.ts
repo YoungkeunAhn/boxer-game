@@ -5,6 +5,10 @@ import {
   getStageDefinition,
 } from "../data/stages";
 import {
+  ATTACK_COOLDOWN_MS,
+  ATTACK_FIXED_HAND,
+  ATTACK_PRIORITY,
+  ATTACK_TYPES,
   BOSS_TIME_LIMIT_MS,
   COUNTER_BASE_DAMAGE_RATE,
   INFIGHTER_GUARD_COUNTER_RATE,
@@ -15,8 +19,7 @@ import {
 } from "./constants";
 import {
   addProgressToBoxer,
-  calculateAttackDamage,
-  calculateAttackIntervalMs,
+  calculateBasicAttackDamage,
   calculateCombatStats,
   calculateCounterDamage,
   calculateExpectedHitDamage,
@@ -25,9 +28,11 @@ import {
   calculateMonsterAttackPower,
 } from "./formulas";
 import type {
+  AttackType,
   Boxer,
   CombatRuntime,
   CombatStepResult,
+  Hand,
   MonsterAttackResult,
   OfflineProgress,
   StagePosition,
@@ -39,9 +44,56 @@ function assertTimestamp(value: number, name: string): void {
   }
 }
 
-function nextAttackAt(boxer: Boxer, now: number): number {
-  const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
-  return now + calculateAttackIntervalMs(stats.attackSpeed);
+// 실효 쿨타임 = 문서 쿨타임 / attackSpeed. attackSpeed가 오를수록 모든 공격이 더 자주 나간다.
+function effectiveCooldownMs(attackType: AttackType, attackSpeed: number): number {
+  return ATTACK_COOLDOWN_MS[attackType] / attackSpeed;
+}
+
+function minReadyAt(nextReadyAt: Record<AttackType, number>): number {
+  let min = Number.POSITIVE_INFINITY;
+  for (const type of ATTACK_TYPES) {
+    if (nextReadyAt[type] < min) min = nextReadyAt[type];
+  }
+  return min;
+}
+
+// 전투 시작·스테이지 전이·강화(공격 속도 변동) 시 4종 공격 쿨타임을 now 기준으로 재설정한다.
+// 가정: 새 전투/강화 시 콤보 진행(직전 손)을 초기화한다(lastHand는 호출부가 정함).
+function createAttackSchedule(
+  attackSpeed: number,
+  now: number,
+): { nextReadyAt: Record<AttackType, number>; nextAttackAt: number } {
+  const nextReadyAt = {
+    JAB: now + effectiveCooldownMs("JAB", attackSpeed),
+    STRAIGHT: now + effectiveCooldownMs("STRAIGHT", attackSpeed),
+    HOOK: now + effectiveCooldownMs("HOOK", attackSpeed),
+    UPPER: now + effectiveCooldownMs("UPPER", attackSpeed),
+  };
+  return { nextReadyAt, nextAttackAt: minReadyAt(nextReadyAt) };
+}
+
+// v1.3a: ready인(쿨타임이 끝난) 공격 중 우선순위가 가장 높은 것을 고른다. 매 틱 한 종류만 친다.
+// 가정: 단순·결정적 정책. 콤비네이션(TASK-008)이 이 정책을 정교화한다.
+export function selectAttackType(
+  nextReadyAt: Record<AttackType, number>,
+  now: number,
+): AttackType {
+  for (const type of ATTACK_PRIORITY) {
+    if (nextReadyAt[type] <= now) return type;
+  }
+  // 방어적 처리: ready가 없으면 가장 빨리 준비되는 공격을 고른다(정상 호출에선 도달하지 않음).
+  return ATTACK_TYPES.reduce((soonest, type) =>
+    nextReadyAt[type] < nextReadyAt[soonest] ? type : soonest,
+  );
+}
+
+// 손 선택 규칙(문서): 잽=왼손/스트레이트=오른손 고정. 훅·어퍼는 직전 손과 반대 손 우선(없으면 왼손).
+export function selectHand(attackType: AttackType, lastHand: Hand | null): Hand {
+  const fixed = ATTACK_FIXED_HAND[attackType];
+  if (fixed) return fixed;
+  if (lastHand === "LEFT") return "RIGHT";
+  if (lastHand === "RIGHT") return "LEFT";
+  return "LEFT";
 }
 
 export function createCombatRuntime(
@@ -53,18 +105,28 @@ export function createCombatRuntime(
   assertTimestamp(now, "now");
   const stage = getStageDefinition(position);
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
+  const schedule = createAttackSchedule(stats.attackSpeed, now);
   // 전투 시작·스테이지 전이 시 복서 HP를 최대치로 충전한다.
   return {
     position: { ...position },
     monsterHp: stage.maxHp,
     bossDeadlineAt: stage.isBoss ? now + BOSS_TIME_LIMIT_MS : null,
-    nextAttackAt: nextAttackAt(boxer, now),
+    nextAttackAt: schedule.nextAttackAt,
     isFarming: isFarming && !stage.isBoss,
+    nextReadyAt: schedule.nextReadyAt,
+    lastHand: null,
     boxerHp: stats.maxHp,
     boxerMaxHp: stats.maxHp,
     nextMonsterAttackAt: now + MONSTER_ATTACK_INTERVAL_MS,
     monsterAttackPrep: null,
   };
+}
+
+// 강화 등으로 공격 속도가 바뀌었을 때 공격 쿨타임만 now 기준으로 재설정한 새 런타임을 만든다(HP·진행 유지).
+export function rescheduleAttacks(combat: CombatRuntime, attackSpeed: number, now: number): CombatRuntime {
+  assertTimestamp(now, "now");
+  const schedule = createAttackSchedule(attackSpeed, now);
+  return { ...combat, nextReadyAt: schedule.nextReadyAt, nextAttackAt: schedule.nextAttackAt };
 }
 
 // v1.2a/v1.2b: 몬스터 공격 한 번. 회피 → 가드 → 피격 순으로 판정한다.
@@ -224,7 +286,10 @@ export function resolveAttack(
 
   const stage = getStageDefinition(combat.position);
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
-  const { damage, isCritical } = calculateAttackDamage(stats, randomValue);
+  // 이번 틱에 칠 공격(우선순위)과 손을 고른 뒤 계수 데미지를 적용한다.
+  const attackType = selectAttackType(combat.nextReadyAt, now);
+  const hand = selectHand(attackType, combat.lastHand);
+  const { damage, isCritical } = calculateBasicAttackDamage(stats, attackType, randomValue);
   const killed = damage >= combat.monsterHp;
   const goldReward = killed
     ? calculateGoldReward(stage.goldReward, stats.goldBonus)
@@ -248,10 +313,17 @@ export function resolveAttack(
       true,
     );
   } else if (!killed) {
+    // 친 공격만 쿨타임을 갱신하고 직전 손을 기록한다. 다른 공격의 준비 시각은 그대로 둔다.
+    const nextReadyAt = {
+      ...combat.nextReadyAt,
+      [attackType]: now + effectiveCooldownMs(attackType, stats.attackSpeed),
+    };
     nextCombat = {
       ...combat,
       monsterHp: Math.max(0, combat.monsterHp - damage),
-      nextAttackAt: nextAttackAt(nextBoxer, now),
+      nextReadyAt,
+      nextAttackAt: minReadyAt(nextReadyAt),
+      lastHand: hand,
     };
   } else if (combat.isFarming) {
     nextCombat = createCombatRuntime(nextBoxer, combat.position, now, true);
@@ -272,6 +344,8 @@ export function resolveAttack(
       isCritical,
       killed,
       goldReward,
+      attackType,
+      hand,
     },
     bossTimedOut: timedOutAfterAttack,
     monsterAttack: null,
@@ -343,6 +417,9 @@ export function calculateOfflineProgress(
     : { ...position };
   const stage = getStageDefinition(offlinePosition);
   // 가정: 오프라인 정산은 피격(회피/가드/카운터 포함)을 모델링하지 않고 기존 파밍 정산을 그대로 유지한다.
+  // v1.3a: 4종 공격을 평균 효율로 일반화한다. 계수 가중합 Σ(계수/쿨타임초)=1.0 이라
+  //   base-rate(attackSpeed) 한 틱당 평균 피해 = 기대 타격 피해이므로(= calculateAttackDps),
+  //   기존 정산식을 그대로 쓴다. 공격 횟수를 먼저 내림해 1초 미만 이탈은 0처치로 둔다.
   // 복귀 시 createCombatRuntime이 boxerHp를 최대치로 채운다(TASK-013에서 재검토).
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
   const elapsedSeconds = clampedElapsedMs / 1_000;

@@ -3,12 +3,13 @@ import { getStageDefinition } from "../data/stages";
 import {
   calculateOfflineProgress,
   createCombatRuntime,
+  rescheduleAttacks,
   resolveBossTimeout,
   retryBoss as createBossRetry,
   stepCombat,
 } from "../game/combat";
 import { DEFAULT_BOXER_TYPE, DEFAULT_GENDER, INITIAL_UPGRADE_LEVELS } from "../game/constants";
-import { calculateAttackIntervalMs, calculateCombatStats, purchaseUpgrade } from "../game/formulas";
+import { calculateCombatStats, purchaseUpgrade } from "../game/formulas";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
 import type {
   Boxer,
@@ -293,11 +294,12 @@ export function createGameStore(
         // 가정: 체력 강화 시 최대 HP가 늘어난 만큼 현재 HP도 가산(풀충전 아님). 현재 HP는 새 최대치 클램프.
         const hpDelta = Math.max(0, stats.maxHp - state.combat.boxerMaxHp);
         const boxerHp = Math.min(stats.maxHp, state.combat.boxerHp + hpDelta);
+        // 변경된 공격 속도를 반영해 4종 공격 쿨타임을 now 기준으로 재설정한다(가정: 콤보 진행 초기화).
+        const rescheduled = rescheduleAttacks(state.combat, stats.attackSpeed, now);
         set({
           boxer: result.boxer,
           combat: {
-            ...state.combat,
-            nextAttackAt: now + calculateAttackIntervalMs(stats.attackSpeed),
+            ...rescheduled,
             boxerHp,
             boxerMaxHp: stats.maxHp,
           },

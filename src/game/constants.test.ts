@@ -37,7 +37,7 @@ describe("게임 기준 상수", () => {
       counter: 0,
     });
     expect(SCHEMA_VERSION).toBe(5);
-    expect(BALANCE_VERSION).toBe(4);
+    expect(BALANCE_VERSION).toBe(5);
     expect(STAGES_BALANCE_VERSION).toBe(BALANCE_VERSION);
   });
 
