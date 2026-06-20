@@ -5,11 +5,11 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v3";
+export const SAVE_KEY = "boxer-game.save.v5";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-export const SCHEMA_VERSION = 3;
-export const BALANCE_VERSION = 2;
+export const SCHEMA_VERSION = 5;
+export const BALANCE_VERSION = 4;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";
@@ -19,7 +19,12 @@ export type UpgradeKey =
   | "attackSpeed"
   | "critRate"
   | "critDamage"
-  | "goldBonus";
+  | "goldBonus"
+  // v4(TASK-005): 체력·방어, v5(TASK-006): 회피·카운터 강화.
+  | "maxHp"
+  | "defense"
+  | "dodge"
+  | "counter";
 
 export type SeedOptions = {
   name?: string;
@@ -40,6 +45,10 @@ const ZERO_LEVELS: Record<UpgradeKey, number> = {
   critRate: 0,
   critDamage: 0,
   goldBonus: 0,
+  maxHp: 0,
+  defense: 0,
+  dodge: 0,
+  counter: 0,
 };
 
 // save.ts의 isSaveData를 통과하는 v3 저장 JSON을 만든다.
