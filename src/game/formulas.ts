@@ -3,6 +3,9 @@ import {
   ATTACK_DAMAGE_COEFFICIENTS,
   ATTACK_TYPES,
   BOXER_TYPE_MODIFIERS,
+  FULL_COMBO_UPPER_DAMAGE_MULT,
+  ONE_TWO_HOOK_CRIT_BONUS,
+  ONE_TWO_STRAIGHT_DAMAGE_MULT,
   COUNTER_BASE_DAMAGE_RATE,
   COUNTER_PER_LEVEL,
   COUNTER_RATE_CAP,
@@ -28,6 +31,7 @@ import type {
   Boxer,
   BoxerType,
   CombatStats,
+  ComboId,
   Hand,
   StagePosition,
   UpgradeKey,
@@ -251,20 +255,57 @@ export function calculateAttackDamage(
   };
 }
 
-// v1.3a: 공격별 데미지. 기존 치명타·클램프 로직을 재사용하고 공격 계수를 곱한다.
+// v1.3a: 콤보 없는 공격별 데미지. calculateComboAdjustedDamage(combo=null)와 동일하므로 그쪽에 위임한다.
 export function calculateBasicAttackDamage(
   stats: CombatStats,
   attackType: AttackType,
   randomValue: number,
 ): { damage: number; isCritical: boolean } {
+  return calculateComboAdjustedDamage(stats, attackType, null, randomValue);
+}
+
+// v1.3b: 발동한 콤비네이션에 따른 보너스 계수. 콤보가 없으면 중립값(배수 1.0·치명타 가산 0).
+//   원투 → 마무리 스트레이트 데미지 ×ONE_TWO_STRAIGHT_DAMAGE_MULT.
+//   원투 훅 → 마무리 훅 치명타 확률 +ONE_TWO_HOOK_CRIT_BONUS(가산).
+//   풀 콤비네이션 → 마무리 어퍼 데미지 ×FULL_COMBO_UPPER_DAMAGE_MULT.
+// 보너스는 콤보를 마무리한 그 타격(스트레이트/훅/어퍼)에만 적용된다(combat.ts가 매칭 결과를 넘긴다).
+export function comboBonus(combo: ComboId | null): {
+  damageMultiplier: number;
+  critBonus: number;
+} {
+  switch (combo) {
+    case "ONE_TWO":
+      return { damageMultiplier: ONE_TWO_STRAIGHT_DAMAGE_MULT, critBonus: 0 };
+    case "ONE_TWO_HOOK":
+      return { damageMultiplier: 1, critBonus: ONE_TWO_HOOK_CRIT_BONUS };
+    case "FULL_COMBO":
+      return { damageMultiplier: FULL_COMBO_UPPER_DAMAGE_MULT, critBonus: 0 };
+    default:
+      return { damageMultiplier: 1, critBonus: 0 };
+  }
+}
+
+// v1.3b: 콤보 보너스를 반영한 공격 데미지/치명타. combo=null이면 calculateBasicAttackDamage와 동일.
+//   치명타 판정 = randomValue < (critRate + critBonus)(1.0 클램프). 데미지 = 기본계수 × 콤보배수 × (치명타?critDamage:1).
+export function calculateComboAdjustedDamage(
+  stats: CombatStats,
+  attackType: AttackType,
+  combo: ComboId | null,
+  randomValue: number,
+): { damage: number; isCritical: boolean } {
   if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
     throw new RangeError("randomValue는 0 이상 1 미만이어야 합니다.");
   }
-  const isCritical = randomValue < stats.critRate;
+  const { damageMultiplier, critBonus } = comboBonus(combo);
+  const critRate = Math.min(1, stats.critRate + critBonus);
+  const isCritical = randomValue < critRate;
   const coefficient = ATTACK_DAMAGE_COEFFICIENTS[attackType];
   return {
     damage: toSafeInteger(
-      stats.attackPower * coefficient * (isCritical ? stats.critDamage : 1),
+      stats.attackPower *
+        coefficient *
+        damageMultiplier *
+        (isCritical ? stats.critDamage : 1),
     ),
     isCritical,
   };

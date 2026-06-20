@@ -14,6 +14,7 @@ import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot }
 import type {
   Boxer,
   BoxerType,
+  ComboId,
   CombatRuntime,
   GameState,
   Gender,
@@ -60,6 +61,9 @@ const EMPTY_STATE: GameState = {
   legacySaveDetected: false,
   bossRemainingMs: 0,
   recentDefense: null,
+  comboGauge: 0,
+  comboStep: 0,
+  lastCombo: null,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -176,6 +180,7 @@ export function createGameStore(
 
       let lastAttack = get().lastAttack;
       let recentDefense: MonsterAttackResult | null = get().recentDefense;
+      let lastCombo: ComboId | null = get().lastCombo;
       let killed = false;
       let bossTimedOut = false;
       let bossDefeated = false;
@@ -209,6 +214,8 @@ export function createGameStore(
           lastAttack = step.attack;
           killed ||= step.attack.killed;
           bossDefeated ||= attackedStageWasBoss && step.attack.killed;
+          // v1.3b: 발동한 콤비네이션이 있으면 직전 발동 콤보로 갱신(연출용). null이면 직전 값 유지.
+          if (step.attack.combo) lastCombo = step.attack.combo;
         }
         if (step.monsterAttack) recentDefense = step.monsterAttack;
         bossTimedOut ||= step.bossTimedOut;
@@ -228,6 +235,10 @@ export function createGameStore(
         combat,
         lastAttack,
         recentDefense,
+        // v1.3b: 콤보 연출 상태를 노출(combat 런타임 필드에서 파생). 로직 추가 없이 표시용.
+        comboGauge: combat.comboGauge,
+        comboStep: combat.comboStep,
+        lastCombo,
         bossRemainingMs: getBossRemainingMs(combat, now),
         message: knockedDown
           ? "KNOCK DOWN"
