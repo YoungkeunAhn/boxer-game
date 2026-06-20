@@ -43,6 +43,20 @@
 - 타입에 맞지 않는 스킬은 장착되지 않는다.
 - `node tools/check.mjs full` 통과.
 
+## 체크리스트
+
+- [ ] `src/data/skills.ts`(신규): 스킬 정의 타입(`id`/`name`/`type`/`kind`/효과 메타/쿨타임)
+- [ ] `skills.ts`: 인파이터 5종(리버샷·철벽가드·압박·가젤펀치·뎀프시롤) 정의
+- [ ] `skills.ts`: 아웃복서 5종(고스트스텝·나비스텝·스텝백카운터·팬텀잽·거리조절) 정의, 수치 `가정:` 임시값
+- [ ] `types.ts`: `Boxer.equippedSkills`(active/passive), `CombatRuntime.skillCooldowns`·활성 버프 상태 추가
+- [ ] `types.ts`: 저장 형태 변경 → `SCHEMA_VERSION` 상향
+- [ ] `src/game/skills.ts`(신규, 순수): 액티브 발동 판정(`가정:` 정책)·효과 적용·패시브 상시 적용
+- [ ] `combat.ts`: 스킬 효과를 전투 루프에 연결(그로기·회피/카운터·피해감소·몬스터 쿨 지연·다단·DoT)
+- [ ] `constants.ts`: 가정 수치 모음 + 슬롯 수(액티브 3·패시브 1), `BALANCE_VERSION` 상향
+- [ ] 장착 UI 골격: `gameStore` 액션 + 컴포넌트로 타입 맞는 스킬만 장착/해제
+- [ ] 테스트: 스킬별 효과, 쿨타임, 타입 제약, 패시브 상시 적용, 장착/해제
+- [ ] `node tools/check.mjs full` 통과
+
 ## 결과 보고 형식
 
 수정 파일 / 스킬 데이터·효과 매핑(가정) / 발동 정책 / 슬롯 구조 / 버전 변경 / 남은 TODO / 다음 태스크.

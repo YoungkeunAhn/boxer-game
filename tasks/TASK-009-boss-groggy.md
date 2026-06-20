@@ -41,6 +41,19 @@
 - 보스 제한시간·실패·재도전이 기존대로 동작한다.
 - `node tools/check.mjs full` 통과.
 
+## 체크리스트
+
+- [ ] `types.ts`: `CombatRuntime`(보스 한정)에 `groggyGauge`·`groggyMax`·`groggyUntil` 추가
+- [ ] `types.ts`: `AttackResult`에 그로기 누적량·발동 여부 필드 추가
+- [ ] `types.ts`: 저장 형태 변경 시 `SCHEMA_VERSION` 상향(비저장 택일 시 명시)
+- [ ] `constants.ts`: `groggyMax`, 공격별 누적량, 지속 시간, 추가 피해 배수, 강공격 예고 타이밍 `가정:` 임시값
+- [ ] `constants.ts`: `BALANCE_VERSION` 상향
+- [ ] `combat.ts`: 훅/어퍼/풀콤보로 `groggyGauge` 누적, `groggyMax` 도달 시 `groggyUntil` 설정·게이지 리셋
+- [ ] `combat.ts`: 그로기 상태 동안 보스 받는 피해 추가 배수, `resolveBossTimeout`(제한시간·경계) 호환 통합, 비보스 비활성
+- [ ] `gameStore.ts`: 그로기 게이지·그로기 상태 상태 노출
+- [ ] 테스트: 그로기 누적·발동·만료, 그로기 중 추가 피해, 비보스 비활성, 제한시간 상호작용, 타입별 경향
+- [ ] `node tools/check.mjs full` 통과
+
 ## 결과 보고 형식
 
 수정 파일 / 그로기 수식·누적 소스(가정) / 추가 피해 배수 / 제한시간 통합 / 버전 변경 / 남은 TODO / 다음 태스크.

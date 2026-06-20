@@ -44,6 +44,21 @@
 - 아웃복서가 인파이터보다 더 자주 MISS/COUNTER를 낸다(결정적 테스트로 검증).
 - `node tools/check.mjs full` 통과.
 
+## 체크리스트
+
+- [ ] `types.ts`: `CombatStats`/`UpgradeLevels`에 `dodge`·`counter` 추가, `UpgradeKey`에 포함
+- [ ] `types.ts`: `AttackResult`/`CombatStepResult`에 `'HIT' | 'GUARD' | 'MISS' | 'COUNTER'` 분류와 카운터 데미지 필드 추가
+- [ ] `types.ts`: 저장 형태 변경 → `SCHEMA_VERSION` 상향
+- [ ] `constants.ts`: 회피 증가량·상한, 카운터 조건·데미지 계수, 가드 감소율, 타입 보정 `가정:` 임시값 추가
+- [ ] `constants.ts`: `BALANCE_VERSION` 상향
+- [ ] `formulas.ts`: `dodge`·`counter` 강화 곡선·비용(기존 규칙·클램프), 회피→가드 판정 수식
+- [ ] `combat.ts`: `resolveMonsterAttack` 확장(회피→가드→피격, 인파이터 가드 반격, 아웃복서 회피·카운터)
+- [ ] `combat.ts`: 모든 분기를 주입된 `random`으로 결정적 처리, 결과 분류를 `CombatStepResult`로 노출
+- [ ] `gameStore.ts`: 최근 방어 결과(MISS/GUARD/COUNTER) 상태 노출
+- [ ] 테스트: 회피/가드/카운터 분기 결정적 케이스, 타입 보정 차이, 강화 곡선·비용·상한, 카운터 데미지
+- [ ] 테스트: 아웃복서가 인파이터보다 MISS/COUNTER를 더 자주 냄을 결정적으로 검증
+- [ ] `node tools/check.mjs full` 통과
+
 ## 결과 보고 형식
 
 수정 파일 / 판정 순서·수식(가정값) / 타입 보정 차이 / 버전 변경 / 남은 TODO / 다음 태스크.

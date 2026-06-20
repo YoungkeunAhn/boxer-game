@@ -46,6 +46,22 @@
 - 처치·골드·보스 진행이 기존과 동일하게 동작한다.
 - `node tools/check.mjs full` 통과.
 
+## 체크리스트
+
+- [ ] `types.ts`: `AttackType`(JAB/STRAIGHT/HOOK/UPPER)·`Hand`(LEFT/RIGHT) 추가
+- [ ] `types.ts`: `CombatRuntime`에 `nextReadyAt: Record<AttackType, number>`·`lastHand` 추가, `AttackResult`에 `attackType`·`hand` 추가
+- [ ] `types.ts`: 저장 형태 변경 시 `SCHEMA_VERSION` 상향
+- [ ] `constants.ts`: 공격별 쿨타임(잽1/스트레이트5/훅10/어퍼15초), 데미지 계수·손 고정 규칙 `가정:` 임시값
+- [ ] `constants.ts`: `BALANCE_VERSION` 상향
+- [ ] `combat.ts`: `resolveAttack` 재설계 — ready 공격 중 선택 정책(`가정:` 명시, 단순·결정적)
+- [ ] `combat.ts`: 손 선택 규칙(좌우 교대, 콤보 지정 손 우선, 훅·어퍼만 선택), 데미지 계수·치명타·쿨타임·`lastHand` 갱신
+- [ ] `combat.ts`: `advanceCombat`가 서로 다른 쿨타임을 `now` 기준 이벤트 큐로 시간순 처리
+- [ ] `formulas.ts`: 공격별 데미지 계산 헬퍼(치명타·클램프 재사용)
+- [ ] `gameStore.ts`: 마지막 공격(타입·손)·다음 준비 시각 상태 노출
+- [ ] 테스트: 쿨타임별 발동 빈도, 손 교대·고정 규칙, 데미지 계수, 처치·골드 정산 동일
+- [ ] 테스트: 잽 최다·어퍼 최소 발동을 결정적으로 검증, 오프라인 정산 방식 명시·검증
+- [ ] `node tools/check.mjs full` 통과
+
 ## 결과 보고 형식
 
 수정 파일 / 공격 선택·손 정책(가정) / 쿨타임·데미지 계수 / 오프라인 정산 처리 / 버전 변경 / 남은 TODO / 다음 태스크.

@@ -44,6 +44,20 @@
 - 콤보 게이지가 잽으로 누적된다.
 - `node tools/check.mjs full` 통과.
 
+## 체크리스트
+
+- [ ] `types.ts`: `CombatRuntime`에 `attackHistory`(길이 제한)·`comboGauge` 추가
+- [ ] `types.ts`: `AttackResult`에 콤비네이션 식별자(`'ONE_TWO' | 'ONE_TWO_HOOK' | 'FULL_COMBO' | null`) 추가
+- [ ] `types.ts`: 저장 형태 변경 시 `SCHEMA_VERSION` 상향
+- [ ] `constants.ts`: 원투/원투훅/풀콤보 정의와 보너스 수치(데미지·치명타·게이지) `가정:` 임시값
+- [ ] `constants.ts`: `BALANCE_VERSION` 상향
+- [ ] `combat.ts`: `attackHistory` 갱신·콤비네이션 매칭(순서+손) 판정·보너스 적용
+- [ ] `combat.ts`: 콤보 끊김 조건(`가정:` 명시), 잽으로 `comboGauge` 누적
+- [ ] `combat.ts`: TASK-007 공격 선택 정책을 콤보 진행 우선으로 정교화(한 곳에 모음)
+- [ ] `gameStore.ts`: 콤보 진행 단계·게이지·직전 발동 콤비네이션 상태 노출
+- [ ] 테스트: 각 콤비네이션 정확한 시퀀스 발동, 손 불일치 미발동, 보너스 적용량, 콤보 끊김, 게이지 누적
+- [ ] `node tools/check.mjs full` 통과
+
 ## 결과 보고 형식
 
 수정 파일 / 콤비네이션 정의·보너스(가정) / 콤보 게이지 규칙 / 공격 선택 정책 변화 / 버전 변경 / 남은 TODO / 다음 태스크.
