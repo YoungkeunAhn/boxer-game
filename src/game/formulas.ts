@@ -1,4 +1,7 @@
 import {
+  ATTACK_COOLDOWN_MS,
+  ATTACK_DAMAGE_COEFFICIENTS,
+  ATTACK_TYPES,
   BOXER_TYPE_MODIFIERS,
   COUNTER_BASE_DAMAGE_RATE,
   COUNTER_PER_LEVEL,
@@ -21,9 +24,11 @@ import {
   UPGRADE_MAX_LEVELS,
 } from "./constants";
 import type {
+  AttackType,
   Boxer,
   BoxerType,
   CombatStats,
+  Hand,
   StagePosition,
   UpgradeKey,
   UpgradeLevels,
@@ -244,6 +249,43 @@ export function calculateAttackDamage(
     ),
     isCritical,
   };
+}
+
+// v1.3a: 공격별 데미지. 기존 치명타·클램프 로직을 재사용하고 공격 계수를 곱한다.
+export function calculateBasicAttackDamage(
+  stats: CombatStats,
+  attackType: AttackType,
+  randomValue: number,
+): { damage: number; isCritical: boolean } {
+  if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
+    throw new RangeError("randomValue는 0 이상 1 미만이어야 합니다.");
+  }
+  const isCritical = randomValue < stats.critRate;
+  const coefficient = ATTACK_DAMAGE_COEFFICIENTS[attackType];
+  return {
+    damage: toSafeInteger(
+      stats.attackPower * coefficient * (isCritical ? stats.critDamage : 1),
+    ),
+    isCritical,
+  };
+}
+
+// v1.3a: 공격 4종의 평균 초당 피해. 실효 쿨타임 = 기본 쿨타임 / attackSpeed 이므로
+// 초당 발동 횟수 = attackSpeed / 기본쿨타임초. 오프라인 정산을 4종 평균 효율로 일반화하는 데 쓴다.
+// 계수 가중합을 1.0으로 맞춰 두었으므로 기존 단일 공격 정산과 동일한 값을 낸다.
+export function calculateAttackDps(stats: CombatStats): number {
+  const expectedHit = calculateExpectedHitDamage(stats);
+  let weightPerSecond = 0;
+  for (const type of ATTACK_TYPES) {
+    weightPerSecond +=
+      ATTACK_DAMAGE_COEFFICIENTS[type] / (ATTACK_COOLDOWN_MS[type] / 1_000);
+  }
+  return expectedHit * stats.attackSpeed * weightPerSecond;
+}
+
+// v1.3a: 애니메이션 키 매핑 규약(예: boxer_left_jab, boxer_right_upper). TASK-012에서 실제 적용.
+export function attackAnimationKey(attackType: AttackType, hand: Hand): string {
+  return `boxer_${hand.toLowerCase()}_${attackType.toLowerCase()}`;
 }
 
 export function calculateGoldReward(

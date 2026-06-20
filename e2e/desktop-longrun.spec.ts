@@ -26,7 +26,9 @@ test.describe("데스크톱·장시간 실행", () => {
   });
 
   test("공격 한 번당 HP가 한 번만 감소한다(타이머 중복 없음)", async ({ page }) => {
-    // 105HP(1-4) 몬스터를 기본 공격력(10)으로 단계별 처치하며 1타=1감소를 확인한다.
+    // 105HP(1-4) 몬스터에 기본 공격력(10)으로 공격한다. 첫 4초는 잽(1초 쿨타임)만 ready이므로
+    // 매 초 잽 한 번씩만 닿아야 한다(스트레이트는 5초). 잽 데미지는 3(일반)/6(치명타),
+    // 중복 타이머라면 한 주기에 2번 이상 닿아 6을 넘는다.
     await seedSave(page, { chapter: 1, stage: 4 });
     await gotoFrozen(page);
 
@@ -34,13 +36,12 @@ test.describe("데스크톱·장시간 실행", () => {
     let prev = await hpNow(page);
     expect(prev).toBe(max);
 
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       await page.clock.runFor(1_000);
       const current = await hpNow(page);
       const delta = prev - current;
-      // 1타 데미지는 10(일반) 또는 20(치명타). 2타 이상이면 중복 타이머.
       expect(delta).toBeGreaterThan(0);
-      expect(delta).toBeLessThanOrEqual(20);
+      expect(delta).toBeLessThanOrEqual(6);
       prev = current;
     }
   });

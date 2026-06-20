@@ -45,7 +45,7 @@ describe("v5 저장과 불러오기", () => {
       status: "loaded",
       data: expect.objectContaining({
         schemaVersion: 5,
-        balanceVersion: 4,
+        balanceVersion: 5,
         savedAt: now.toISOString(),
         boxer: snapshot.boxer,
         position: snapshot.position,

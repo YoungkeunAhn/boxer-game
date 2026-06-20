@@ -1,4 +1,12 @@
-import type { BoxerType, CombatStats, Gender, UpgradeKey, UpgradeLevels } from "./types";
+import type {
+  AttackType,
+  BoxerType,
+  CombatStats,
+  Gender,
+  Hand,
+  UpgradeKey,
+  UpgradeLevels,
+} from "./types";
 
 export const INITIAL_UPGRADE_LEVELS: Readonly<UpgradeLevels> = {
   attackPower: 0,
@@ -87,12 +95,46 @@ export const KNOCKDOWN_PARTIAL_GOLD_RATE = 0.2;
 // 가정: 몬스터 공격 예고 600ms(TASK-012용, 미사용, 임시값).
 export const MONSTER_ATTACK_PREP_MS = 600;
 
+// === v1.3a 기본 공격 4종 (가정: 임시값, TASK-013 확정) ===
+export const ATTACK_TYPES = ["JAB", "STRAIGHT", "HOOK", "UPPER"] as const satisfies readonly AttackType[];
+
+// 문서 명시 쿨타임(공격 속도 1.0 기준). 실효 쿨타임 = 이 값 / attackSpeed.
+export const ATTACK_COOLDOWN_MS: Readonly<Record<AttackType, number>> = {
+  JAB: 1_000,
+  STRAIGHT: 5_000,
+  HOOK: 10_000,
+  UPPER: 15_000,
+};
+
+// 가정: 공격별 데미지 계수(attackPower 배수). 잽 낮음~어퍼 매우 높음.
+// 초당 가중합 Σ(계수 / 쿨타임초) = 0.3 + 1.5/5 + 2.0/10 + 3.0/15 = 1.0 으로 맞춰
+// 평균 DPS를 기존 단일 공격(공격력×attackSpeed/초)과 동일하게 유지한다(처치·골드·보스 진행 동일).
+export const ATTACK_DAMAGE_COEFFICIENTS: Readonly<Record<AttackType, number>> = {
+  JAB: 0.3,
+  STRAIGHT: 1.5,
+  HOOK: 2.0,
+  UPPER: 3.0,
+};
+
+// 손 고정 규칙: 잽=왼손, 스트레이트=오른손, 훅·어퍼=선택(null → 좌우 교대).
+export const ATTACK_FIXED_HAND: Readonly<Record<AttackType, Hand | null>> = {
+  JAB: "LEFT",
+  STRAIGHT: "RIGHT",
+  HOOK: null,
+  UPPER: null,
+};
+
+// ready 공격이 여러 개일 때의 선택 우선순위(강한 공격 우선). 잽이 가장 자주, 어퍼가 가장 드물게 발동한다.
+export const ATTACK_PRIORITY = ["UPPER", "HOOK", "STRAIGHT", "JAB"] as const satisfies readonly AttackType[];
+
 export const BOSS_TIME_LIMIT_MS = 30_000;
 export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 // v4(TASK-005): HP·방어 강화 추가 → SCHEMA 3→4, 몬스터 공격·HP/방어 곡선·타입 maxHp/defense 계수 → BALANCE 2→3.
 // v5(TASK-006): 회피·카운터 강화 추가 → SCHEMA 4→5, 회피·가드·카운터 수식·타입 evasion/counter/damageReduction 계수 → BALANCE 3→4.
+// v1.3a(TASK-007): 기본 공격 4종·손·쿨타임 도입. 저장 형태(Boxer/SaveData) 불변 → SCHEMA 유지(5),
+//   공격별 데미지 계수·쿨타임·평균 DPS 환산 수식 → BALANCE 4→5.
 export const SCHEMA_VERSION = 5;
-export const BALANCE_VERSION = 4;
+export const BALANCE_VERSION = 5;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export const BOXER_TYPES = ["INFIGHTER", "OUT_BOXER"] as const satisfies readonly BoxerType[];

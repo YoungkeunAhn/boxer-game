@@ -32,6 +32,10 @@ export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 
 export type Gender = "MALE" | "FEMALE";
 
+// v1.3a: 기본 공격 4종과 타격 손.
+export type AttackType = "JAB" | "STRAIGHT" | "HOOK" | "UPPER";
+export type Hand = "LEFT" | "RIGHT";
+
 export type Boxer = {
   id: string;
   name: string;
@@ -62,8 +66,12 @@ export type CombatRuntime = {
   position: StagePosition;
   monsterHp: number;
   bossDeadlineAt: number | null;
+  // 공격별 다음 발동 가능 시각 중 가장 이른 값(boxer 공격 이벤트 시각). nextReadyAt에서 파생한다.
   nextAttackAt: number;
   isFarming: boolean;
+  // v1.3a 런타임 전용(저장 안 함): 공격별 쿨타임 종료(다음 발동 가능) 시각과 직전 타격 손.
+  nextReadyAt: Record<AttackType, number>;
+  lastHand: Hand | null;
   // v1.2a 런타임 전용(저장 안 함).
   boxerHp: number;
   boxerMaxHp: number;
@@ -77,6 +85,9 @@ export type AttackResult = {
   isCritical: boolean;
   killed: boolean;
   goldReward: number;
+  // v1.3a: 어떤 공격을 어느 손으로 쳤는지(쿨타임·애니메이션 UI용).
+  attackType: AttackType;
+  hand: Hand;
 };
 
 // v1.2b: 몬스터 공격 한 번에 대한 복서 방어 결과 분류.

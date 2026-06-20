@@ -27,8 +27,8 @@ test.describe("저장·백그라운드·오프라인", () => {
     await gotoFrozen(page);
     await createBoxer(page, "챔피언");
 
-    // 1-1, 1-2 처치 후 1-3 진행 중까지 진행한다.
-    await page.clock.runFor(11_000);
+    // 1-1, 1-2 처치 후 1-3 진행 중까지 진행한다(4종 쿨타임 기준 1-2는 t=15000경 처치).
+    await page.clock.runFor(17_000);
     await expect(page.getByText("CHAPTER 1 · STAGE 3")).toBeVisible();
     const goldBefore = await statusSection(page).getByText(/\d+ G/).innerText();
     const killsBefore = await statValue(page, "totalKills").innerText();
