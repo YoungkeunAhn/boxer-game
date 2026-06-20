@@ -9,7 +9,7 @@ export const SAVE_KEY = "boxer-game.save.v5";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
 export const SCHEMA_VERSION = 5;
-export const BALANCE_VERSION = 5;
+export const BALANCE_VERSION = 6;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";

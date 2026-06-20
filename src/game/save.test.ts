@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_UPGRADE_LEVELS } from "./constants";
+import { BALANCE_VERSION, INITIAL_UPGRADE_LEVELS, SCHEMA_VERSION } from "./constants";
 import {
   clearGame,
   LEGACY_SAVE_KEY,
@@ -44,8 +44,8 @@ describe("v5 저장과 불러오기", () => {
     expect(loadGame(storage)).toEqual({
       status: "loaded",
       data: expect.objectContaining({
-        schemaVersion: 5,
-        balanceVersion: 5,
+        schemaVersion: SCHEMA_VERSION,
+        balanceVersion: BALANCE_VERSION,
         savedAt: now.toISOString(),
         boxer: snapshot.boxer,
         position: snapshot.position,

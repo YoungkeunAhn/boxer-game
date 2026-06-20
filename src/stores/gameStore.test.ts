@@ -143,6 +143,36 @@ describe("자동 전투 게임 스토어", () => {
     expect(counterStore.getState().combat?.boxerHp).toBe(outStart.boxerMaxHp); // 피해 없음
   });
 
+  it("콤보 발동 시 lastCombo·comboGauge·comboStep을 상태로 노출한다", () => {
+    const clock = new FakeClock();
+    const inf = boxer();
+    const store = createGameStore(dependencies(clock, { random: () => 0.99 }));
+    const start = createCombatRuntime(inf, { chapter: 1, stage: 4 }, clock.now, true);
+    // 직전 잽(왼손) 진행 + 스트레이트만 즉시 ready → 원투 마무리가 결정적으로 발동한다(처치 안 되게 HP 큼).
+    const FAR = 1_000_000;
+    store.setState({
+      boxer: inf,
+      combat: {
+        ...start,
+        monsterHp: FAR,
+        attackHistory: [{ attackType: "JAB", hand: "LEFT" }],
+        lastHand: "LEFT",
+        nextReadyAt: { JAB: FAR, STRAIGHT: 100, HOOK: FAR, UPPER: FAR },
+        nextAttackAt: 100,
+        nextMonsterAttackAt: FAR,
+        bossDeadlineAt: null,
+      },
+      isRunning: false,
+    });
+    expect(store.getState().lastCombo).toBeNull();
+    store.getState().resume();
+    clock.advanceTo(100);
+    expect(store.getState().lastAttack).toMatchObject({ attackType: "STRAIGHT", combo: "ONE_TWO" });
+    expect(store.getState().lastCombo).toBe("ONE_TWO");
+    expect(store.getState().comboStep).toBe(2); // 원투 시퀀스 길이.
+    expect(store.getState().comboGauge).toBe(0); // 스트레이트는 게이지를 올리지 않는다.
+  });
+
   it("보스 제한 시각과 같은 공격을 먼저 처리해 처치하면 다음 챕터로 이동한다", () => {
     const clock = new FakeClock();
     // 강한 복서: 한 방에 보스를 잡는다. 회피 실패(0.99)여도 14회 가드 피격(8×14=112 < 130)을 버틴다.

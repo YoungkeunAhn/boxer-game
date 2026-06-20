@@ -36,6 +36,12 @@ export type Gender = "MALE" | "FEMALE";
 export type AttackType = "JAB" | "STRAIGHT" | "HOOK" | "UPPER";
 export type Hand = "LEFT" | "RIGHT";
 
+// v1.3b: 콤비네이션 식별자. AttackResult에 이번 타격으로 발동한 콤비네이션을 담는다.
+export type ComboId = "ONE_TWO" | "ONE_TWO_HOOK" | "FULL_COMBO";
+
+// v1.3b: 콤비네이션 매칭에 쓰는 한 타격의 (공격 종류·손) 단위.
+export type AttackBeat = { attackType: AttackType; hand: Hand };
+
 export type Boxer = {
   id: string;
   name: string;
@@ -72,6 +78,13 @@ export type CombatRuntime = {
   // v1.3a 런타임 전용(저장 안 함): 공격별 쿨타임 종료(다음 발동 가능) 시각과 직전 타격 손.
   nextReadyAt: Record<AttackType, number>;
   lastHand: Hand | null;
+  // v1.3b 런타임 전용(저장 안 함): 콤보 진행 상태.
+  //  - attackHistory: 최근 타격 (공격 종류·손) 시퀀스. 길이 상한은 ATTACK_HISTORY_LIMIT.
+  //  - comboGauge: 잽으로 누적되는 게이지(0~COMBO_GAUGE_MAX). 비저장.
+  //  - comboStep: 현재 진행한 콤보 단계(0=미진행). gameStore 연출용.
+  attackHistory: AttackBeat[];
+  comboGauge: number;
+  comboStep: number;
   // v1.2a 런타임 전용(저장 안 함).
   boxerHp: number;
   boxerMaxHp: number;
@@ -88,6 +101,8 @@ export type AttackResult = {
   // v1.3a: 어떤 공격을 어느 손으로 쳤는지(쿨타임·애니메이션 UI용).
   attackType: AttackType;
   hand: Hand;
+  // v1.3b: 이번 타격으로 발동한 콤비네이션(없으면 null).
+  combo: ComboId | null;
 };
 
 // v1.2b: 몬스터 공격 한 번에 대한 복서 방어 결과 분류.
@@ -129,6 +144,10 @@ export type GameState = {
   legacySaveDetected: boolean;
   // v1.2b: 최근 몬스터 공격에 대한 방어 결과(UI 연출용).
   recentDefense: MonsterAttackResult | null;
+  // v1.3b: 콤보 연출용 상태(비저장, 런타임 전용). lastCombo는 직전 발동 콤비네이션.
+  comboGauge: number;
+  comboStep: number;
+  lastCombo: ComboId | null;
 };
 
 export type SaveDataV2 = {

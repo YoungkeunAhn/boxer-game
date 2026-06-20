@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DODGE_RATE_CAP,
+  FULL_COMBO_UPPER_DAMAGE_MULT,
   INFIGHTER_GUARD_COUNTER_RATE,
+  ONE_TWO_HOOK_CRIT_BONUS,
+  ONE_TWO_STRAIGHT_DAMAGE_MULT,
 } from "./constants";
 import type { Boxer, CombatStats, UpgradeLevels } from "./types";
 import {
@@ -11,6 +14,8 @@ import {
   calculateAttackIntervalMs,
   calculateBasicAttackDamage,
   calculateCombatStats,
+  calculateComboAdjustedDamage,
+  comboBonus,
   calculateCounterDamage,
   calculateDamageReduction,
   calculateExpectedHitDamage,
@@ -216,6 +221,41 @@ describe("자동 전투 수식", () => {
       isCritical: true,
     });
     expect(() => calculateBasicAttackDamage(stats, "JAB", 1)).toThrow(RangeError);
+  });
+
+  it("comboBonus가 콤비네이션별 가정 상수와 정확히 일치하는 배수·치명타 가산을 낸다", () => {
+    expect(comboBonus(null)).toEqual({ damageMultiplier: 1, critBonus: 0 });
+    expect(comboBonus("ONE_TWO")).toEqual({
+      damageMultiplier: ONE_TWO_STRAIGHT_DAMAGE_MULT,
+      critBonus: 0,
+    });
+    expect(comboBonus("ONE_TWO_HOOK")).toEqual({
+      damageMultiplier: 1,
+      critBonus: ONE_TWO_HOOK_CRIT_BONUS,
+    });
+    expect(comboBonus("FULL_COMBO")).toEqual({
+      damageMultiplier: FULL_COMBO_UPPER_DAMAGE_MULT,
+      critBonus: 0,
+    });
+  });
+
+  it("calculateComboAdjustedDamage가 콤보 데미지 배수와 치명타 가산을 반영한다", () => {
+    const stats = calculateCombatStats(zeroLevels); // 공격력 10, 치명타율 0.05, 치명타 2배.
+    // combo=null이면 calculateBasicAttackDamage와 동일.
+    expect(calculateComboAdjustedDamage(stats, "STRAIGHT", null, 0.5)).toEqual(
+      calculateBasicAttackDamage(stats, "STRAIGHT", 0.5),
+    );
+    // 원투: 스트레이트 15 × 1.3 = 19.5 → floor 19(비치명타).
+    expect(calculateComboAdjustedDamage(stats, "STRAIGHT", "ONE_TWO", 0.5).damage).toBe(19);
+    // 풀콤보: 어퍼 30 × 1.5 = 45(비치명타).
+    expect(calculateComboAdjustedDamage(stats, "UPPER", "FULL_COMBO", 0.5).damage).toBe(45);
+    // 원투훅: 치명타율 0.05 + 0.2 = 0.25. random=0.1 → 치명타 발동(보너스 없으면 미발동).
+    const hook = calculateComboAdjustedDamage(stats, "HOOK", "ONE_TWO_HOOK", 0.1);
+    expect(hook.isCritical).toBe(true);
+    expect(hook.damage).toBe(40); // 훅 20 × 치명타 2.
+    // 같은 random이라도 콤보 없으면 비치명타(0.1 ≥ 0.05).
+    expect(calculateComboAdjustedDamage(stats, "HOOK", null, 0.1).isCritical).toBe(false);
+    expect(() => calculateComboAdjustedDamage(stats, "JAB", "ONE_TWO", 1)).toThrow(RangeError);
   });
 
   it("평균 DPS는 계수 가중합 1.0으로 기존 단일 공격(공격력×attackSpeed×기대배수)과 동일하다", () => {

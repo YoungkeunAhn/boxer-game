@@ -7,9 +7,13 @@ import {
 import {
   ATTACK_COOLDOWN_MS,
   ATTACK_FIXED_HAND,
+  ATTACK_HISTORY_LIMIT,
   ATTACK_PRIORITY,
   ATTACK_TYPES,
   BOSS_TIME_LIMIT_MS,
+  COMBINATIONS,
+  COMBO_GAUGE_MAX,
+  COMBO_GAUGE_PER_JAB,
   COUNTER_BASE_DAMAGE_RATE,
   INFIGHTER_GUARD_COUNTER_RATE,
   KNOCKDOWN_PARTIAL_GOLD_RATE,
@@ -19,8 +23,8 @@ import {
 } from "./constants";
 import {
   addProgressToBoxer,
-  calculateBasicAttackDamage,
   calculateCombatStats,
+  calculateComboAdjustedDamage,
   calculateCounterDamage,
   calculateExpectedHitDamage,
   calculateGoldReward,
@@ -28,10 +32,12 @@ import {
   calculateMonsterAttackPower,
 } from "./formulas";
 import type {
+  AttackBeat,
   AttackType,
   Boxer,
   CombatRuntime,
   CombatStepResult,
+  ComboId,
   Hand,
   MonsterAttackResult,
   OfflineProgress,
@@ -72,12 +78,49 @@ function createAttackSchedule(
   return { nextReadyAt, nextAttackAt: minReadyAt(nextReadyAt) };
 }
 
-// v1.3a: ready인(쿨타임이 끝난) 공격 중 우선순위가 가장 높은 것을 고른다. 매 틱 한 종류만 친다.
-// 가정: 단순·결정적 정책. 콤비네이션(TASK-008)이 이 정책을 정교화한다.
+// 두 타격이 (공격 종류·손)까지 같은지.
+function beatsEqual(a: AttackBeat, b: AttackBeat): boolean {
+  return a.attackType === b.attackType && a.hand === b.hand;
+}
+
+// v1.3b: attackHistory가 어떤 콤보의 "진행 중 prefix"라면, 그 콤보의 다음 단계 타격(공격 종류·손)을 돌려준다.
+//   더 긴 콤보를 우선(FULL_COMBO > ONE_TWO_HOOK > ONE_TWO; COMBINATIONS 정렬 순)해 풀콤보 진행을 끝까지 노린다.
+//   진행 prefix = history의 끝부분이 콤보 시퀀스의 앞 k(1≤k<len)개와 정확히 일치.
+//   진행 중 콤보가 없으면(빈 history 포함) null. 콤보 시작(잽)은 호출부의 우선순위 폴백에 맡긴다.
+export function nextComboBeat(history: readonly AttackBeat[]): AttackBeat | null {
+  for (const combo of COMBINATIONS) {
+    const seq = combo.sequence;
+    for (let k = seq.length - 1; k >= 1; k -= 1) {
+      if (history.length < k) continue;
+      const tail = history.slice(history.length - k);
+      let matches = true;
+      for (let i = 0; i < k; i += 1) {
+        if (!beatsEqual(tail[i], seq[i])) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return seq[k];
+    }
+  }
+  return null;
+}
+
+// v1.3b: 콤보 진행을 우선하는 공격 선택 정책(정책을 한 곳에 모음).
+//   ① 진행 중 콤보의 다음 단계 공격이 ready면 그 공격을 친다(콤보 이어가기).
+//   ② 아니면 기존 우선순위(어퍼>훅>스트레이트>잽) 폴백.
+//   콤보 시작(잽)은 별도로 강제하지 않는다. 잽은 우선순위 최하위라 다른 ready 공격이 있으면 그쪽이 먼저 나가고,
+//   콤보는 자연스레 잽만 ready인 순간에 열린다(문서 발동 정책과 일치).
 export function selectAttackType(
   nextReadyAt: Record<AttackType, number>,
   now: number,
+  history: readonly AttackBeat[] = [],
 ): AttackType {
+  // nextComboBeat는 진행 중 콤보가 있을 때만 다음 단계를 돌려준다(없으면 null → 폴백).
+  const next = nextComboBeat(history);
+  if (next && nextReadyAt[next.attackType] <= now) {
+    return next.attackType;
+  }
   for (const type of ATTACK_PRIORITY) {
     if (nextReadyAt[type] <= now) return type;
   }
@@ -85,6 +128,33 @@ export function selectAttackType(
   return ATTACK_TYPES.reduce((soonest, type) =>
     nextReadyAt[type] < nextReadyAt[soonest] ? type : soonest,
   );
+}
+
+// v1.3b: 이번 타격을 history에 더한 뒤 끝부분(suffix)이 어떤 콤비네이션 시퀀스와 정확히 일치하면 그 식별자를 돌려준다.
+//   더 긴 콤보 우선(COMBINATIONS 정렬). 순서+손이 모두 일치해야 발동한다.
+export function matchCombination(history: readonly AttackBeat[]): ComboId | null {
+  for (const combo of COMBINATIONS) {
+    const seq = combo.sequence;
+    if (history.length < seq.length) continue;
+    const tail = history.slice(history.length - seq.length);
+    let matches = true;
+    for (let i = 0; i < seq.length; i += 1) {
+      if (!beatsEqual(tail[i], seq[i])) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return combo.id;
+  }
+  return null;
+}
+
+// v1.3b: attackHistory에 한 타격을 더하고 길이 상한을 적용한다(불변).
+function pushHistory(history: readonly AttackBeat[], beat: AttackBeat): AttackBeat[] {
+  const next = [...history, beat];
+  return next.length > ATTACK_HISTORY_LIMIT
+    ? next.slice(next.length - ATTACK_HISTORY_LIMIT)
+    : next;
 }
 
 // 손 선택 규칙(문서): 잽=왼손/스트레이트=오른손 고정. 훅·어퍼는 직전 손과 반대 손 우선(없으면 왼손).
@@ -115,6 +185,10 @@ export function createCombatRuntime(
     isFarming: isFarming && !stage.isBoss,
     nextReadyAt: schedule.nextReadyAt,
     lastHand: null,
+    // v1.3b: 콤보 진행 상태를 초기화한다(킬·스테이지 전이·넉다운·보스 타임아웃 시 이 함수로 리셋).
+    attackHistory: [],
+    comboGauge: 0,
+    comboStep: 0,
     boxerHp: stats.maxHp,
     boxerMaxHp: stats.maxHp,
     nextMonsterAttackAt: now + MONSTER_ATTACK_INTERVAL_MS,
@@ -286,11 +360,23 @@ export function resolveAttack(
 
   const stage = getStageDefinition(combat.position);
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
-  // 이번 틱에 칠 공격(우선순위)과 손을 고른 뒤 계수 데미지를 적용한다.
-  const attackType = selectAttackType(combat.nextReadyAt, now);
+  // 이번 틱에 칠 공격(콤보 진행 우선 정책)과 손을 고른다.
+  const attackType = selectAttackType(combat.nextReadyAt, now, combat.attackHistory);
   const hand = selectHand(attackType, combat.lastHand);
-  const { damage, isCritical } = calculateBasicAttackDamage(stats, attackType, randomValue);
+  // 이번 타격을 history에 더한 뒤 콤비네이션(순서+손) 매칭 → 발동 시 보너스를 데미지/치명타에 반영한다.
+  const nextHistory = pushHistory(combat.attackHistory, { attackType, hand });
+  const combo = matchCombination(nextHistory);
+  const { damage, isCritical } = calculateComboAdjustedDamage(stats, attackType, combo, randomValue);
   const killed = damage >= combat.monsterHp;
+  // 잽은 콤보 게이지를 누적한다(상한 클램프). 잽 외 공격은 게이지를 올리지 않는다.
+  const comboGauge =
+    attackType === "JAB"
+      ? Math.min(COMBO_GAUGE_MAX, combat.comboGauge + COMBO_GAUGE_PER_JAB)
+      : combat.comboGauge;
+  // comboStep: 발동한 콤보의 시퀀스 길이(없으면 0). 연출용.
+  const comboStep = combo
+    ? (COMBINATIONS.find((c) => c.id === combo)?.sequence.length ?? 0)
+    : 0;
   const goldReward = killed
     ? calculateGoldReward(stage.goldReward, stats.goldBonus)
     : 0;
@@ -324,6 +410,11 @@ export function resolveAttack(
       nextReadyAt,
       nextAttackAt: minReadyAt(nextReadyAt),
       lastHand: hand,
+      // v1.3b: 콤보 진행 상태를 갱신한다. 콤보 끊김(시퀀스 이탈)은 nextComboBeat/matchCombination이
+      //   suffix 일치로만 발동하므로 별도 리셋 없이 자연스레 처리된다(이탈한 타격은 새 history 끝에 남아 prefix 불일치).
+      attackHistory: nextHistory,
+      comboGauge,
+      comboStep,
     };
   } else if (combat.isFarming) {
     nextCombat = createCombatRuntime(nextBoxer, combat.position, now, true);
@@ -346,6 +437,7 @@ export function resolveAttack(
       goldReward,
       attackType,
       hand,
+      combo,
     },
     bossTimedOut: timedOutAfterAttack,
     monsterAttack: null,

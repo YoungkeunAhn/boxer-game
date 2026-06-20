@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { OFFLINE_MAX_DURATION_MS } from "./constants";
+import {
+  COMBO_GAUGE_MAX,
+  COMBO_GAUGE_PER_JAB,
+  OFFLINE_MAX_DURATION_MS,
+} from "./constants";
 import {
   calculateOfflineProgress,
   createCombatRuntime,
+  matchCombination,
+  nextComboBeat,
   resolveAttack,
   resolveBossTimeout,
   resolveMonsterAttack,
@@ -12,7 +18,7 @@ import {
   stepCombat,
 } from "./combat";
 import { calculateCombatStats } from "./formulas";
-import type { AttackType, Boxer, UpgradeLevels } from "./types";
+import type { AttackBeat, AttackType, Boxer, CombatRuntime, UpgradeLevels } from "./types";
 
 const zeroLevels: UpgradeLevels = {
   attackPower: 0,
@@ -151,28 +157,22 @@ describe("기본 공격 4종·손·쿨타임", () => {
     expect(counts.HOOK).toBeGreaterThan(counts.UPPER);
   });
 
-  it("공격별 데미지 계수가 잽<스트레이트<훅<어퍼 순이고 손이 교대된다", () => {
+  it("콤보 미발동 타격의 기본 데미지 계수가 유지된다(잽 3 < 어퍼 30)", () => {
+    // v1.3b: 콤보 진행 우선 정책에서 스트레이트는 원투 마무리로, 훅은 원투훅 마무리로 자주 소비되므로
+    //   여기서는 콤보 보너스가 붙지 않는(combo===null) 잽·어퍼의 기본 계수가 그대로인지 확인한다.
     let combat = { ...createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0), monsterHp: 1_000_000 };
-    const damageByType: Partial<Record<AttackType, number>> = {};
-    let hookHand: string | undefined;
-    let upperHand: string | undefined;
+    const baseDamageByType: Partial<Record<AttackType, number>> = {};
     while (combat.nextAttackAt <= 30_000) {
       const step = resolveAttack(boxer, combat, 0.99, combat.nextAttackAt);
-      if (step.attack) {
-        damageByType[step.attack.attackType] ??= step.attack.damage;
-        if (step.attack.attackType === "HOOK") hookHand ??= step.attack.hand;
-        if (step.attack.attackType === "UPPER") upperHand ??= step.attack.hand;
+      if (step.attack && step.attack.combo === null) {
+        baseDamageByType[step.attack.attackType] ??= step.attack.damage;
       }
       combat = step.combat;
     }
-    // 공격력 10 기준: 잽 3, 스트레이트 15, 훅 20, 어퍼 30.
-    expect(damageByType.JAB).toBe(3);
-    expect(damageByType.STRAIGHT).toBe(15);
-    expect(damageByType.HOOK).toBe(20);
-    expect(damageByType.UPPER).toBe(30);
-    // 쿨타임 사이를 잽(왼손)이 채우므로 훅·어퍼 직전 손은 잽의 왼손 → 반대 손(오른손)을 고른다.
-    expect(hookHand).toBe("RIGHT");
-    expect(upperHand).toBe("RIGHT");
+    // 공격력 10 기준: 잽 3, 어퍼 30(콤보 보너스 없는 타격).
+    expect(baseDamageByType.JAB).toBe(3);
+    expect(baseDamageByType.UPPER).toBe(30);
+    expect(baseDamageByType.JAB).toBeLessThan(baseDamageByType.UPPER!);
   });
 
   it("처치·골드 정산은 어떤 공격으로 처치하든 동일하다(어퍼 한 방 처치)", () => {
@@ -182,6 +182,230 @@ describe("기본 공격 4종·손·쿨타임", () => {
     expect(outcome.attack?.attackType).toBe("UPPER");
     expect(outcome.attack).toMatchObject({ killed: true, goldReward: 15 });
     expect(outcome.boxer).toMatchObject({ gold: 15, totalKills: 1 });
+  });
+});
+
+describe("콤비네이션·콤보 게이지", () => {
+  const NEVER_KILL_HP = 1_000_000;
+
+  // 직전까지의 콤보 진행(history)과 손을 심고, 다음에 칠 공격만 ready로 만든 런타임을 만든다.
+  // history는 콤보 prefix(예: [JAB,LEFT])로 두고 finisher만 ready로 열어 결정적으로 콤보를 마무리시킨다.
+  function withHistory(
+    history: AttackBeat[],
+    readyTypes: AttackType[],
+    lastHand: "LEFT" | "RIGHT" | null = null,
+    now = 100_000,
+  ): CombatRuntime {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 4 }, 0, true);
+    const FAR = now + 1_000_000;
+    const nextReadyAt: Record<AttackType, number> = {
+      JAB: FAR,
+      STRAIGHT: FAR,
+      HOOK: FAR,
+      UPPER: FAR,
+    };
+    for (const t of readyTypes) nextReadyAt[t] = now;
+    return {
+      ...base,
+      monsterHp: NEVER_KILL_HP,
+      attackHistory: history,
+      lastHand,
+      nextReadyAt,
+      nextAttackAt: now,
+    };
+  }
+
+  const now = 100_000;
+  // 치명타가 절대 나지 않도록 random=0.99 고정(원투훅 치명타 보너스 검증 케이스는 별도 random 사용).
+  const NO_CRIT = 0.99;
+
+  it("원투 발동: left_jab → right_straight 시 스트레이트에 ONE_TWO와 데미지 증가가 붙는다", () => {
+    const combat = withHistory([{ attackType: "JAB", hand: "LEFT" }], ["STRAIGHT"], "LEFT", now);
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("STRAIGHT");
+    expect(step.attack?.hand).toBe("RIGHT");
+    expect(step.attack?.combo).toBe("ONE_TWO");
+    // 기본 스트레이트 15 × 1.3 = 19.5 → floor 19.
+    expect(step.attack?.damage).toBe(19);
+  });
+
+  it("원투 훅 발동: …→ left_hook 시 ONE_TWO_HOOK과 훅 치명타 확률 증가가 적용된다", () => {
+    const history: AttackBeat[] = [
+      { attackType: "JAB", hand: "LEFT" },
+      { attackType: "STRAIGHT", hand: "RIGHT" },
+    ];
+    const combat = withHistory(history, ["HOOK"], "RIGHT", now);
+    // 기본 치명타율 인파이터 0.05 + 보너스 0.2 = 0.25. random=0.1 < 0.25 → 치명타(보너스 없으면 미발생).
+    const step = resolveAttack(boxer, combat, 0.1, now);
+    expect(step.attack?.attackType).toBe("HOOK");
+    expect(step.attack?.hand).toBe("LEFT");
+    expect(step.attack?.combo).toBe("ONE_TWO_HOOK");
+    expect(step.attack?.isCritical).toBe(true);
+    // 훅 20 × 치명타 배수 2 = 40.
+    expect(step.attack?.damage).toBe(40);
+  });
+
+  it("풀 콤보 발동: …→ right_upper 시 FULL_COMBO와 어퍼 데미지 증가가 적용된다", () => {
+    const history: AttackBeat[] = [
+      { attackType: "JAB", hand: "LEFT" },
+      { attackType: "STRAIGHT", hand: "RIGHT" },
+      { attackType: "HOOK", hand: "LEFT" },
+    ];
+    const combat = withHistory(history, ["UPPER"], "LEFT", now);
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("UPPER");
+    expect(step.attack?.hand).toBe("RIGHT");
+    expect(step.attack?.combo).toBe("FULL_COMBO");
+    // 기본 어퍼 30 × 1.5 = 45.
+    expect(step.attack?.damage).toBe(45);
+  });
+
+  it("손 불일치 미발동: right_hook으로 마무리하면 ONE_TWO_HOOK이 발동하지 않는다", () => {
+    const history: AttackBeat[] = [
+      { attackType: "JAB", hand: "LEFT" },
+      { attackType: "STRAIGHT", hand: "RIGHT" },
+    ];
+    // 직전 손을 LEFT로 두면 selectHand가 HOOK을 RIGHT로 고른다(콤보 지정 LEFT와 어긋남).
+    const combat = withHistory(history, ["HOOK"], "LEFT", now);
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("HOOK");
+    expect(step.attack?.hand).toBe("RIGHT");
+    expect(step.attack?.combo).toBeNull();
+    // 보너스 없는 기본 훅 20.
+    expect(step.attack?.damage).toBe(20);
+  });
+
+  it("순서 불일치 미발동: 스트레이트 단독(잽 선행 없음)은 콤보가 발동하지 않는다", () => {
+    const combat = withHistory([], ["STRAIGHT"], null, now);
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("STRAIGHT");
+    expect(step.attack?.combo).toBeNull();
+    expect(step.attack?.damage).toBe(15);
+  });
+
+  it("콤보 끊김: prefix 도중 다른 공격이 끼면 콤비네이션이 발동하지 않는다", () => {
+    // [JAB,STRAIGHT] 뒤에 어퍼가 끼면 history 끝이 [JAB,STRAIGHT,UPPER]가 되어 어떤 콤보 suffix와도 불일치.
+    const history: AttackBeat[] = [
+      { attackType: "JAB", hand: "LEFT" },
+      { attackType: "STRAIGHT", hand: "RIGHT" },
+      { attackType: "UPPER", hand: "LEFT" },
+    ];
+    // 이제 left_hook을 쳐도 suffix는 [STRAIGHT,UPPER,HOOK] → 콤보 아님.
+    const combat = withHistory(history, ["HOOK"], "RIGHT", now);
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("HOOK");
+    expect(step.attack?.combo).toBeNull();
+  });
+
+  it("킬·스테이지 전이 시 attackHistory·comboStep·comboGauge가 초기화된다", () => {
+    const combat: CombatRuntime = {
+      ...withHistory([{ attackType: "JAB", hand: "LEFT" }], ["STRAIGHT"], "LEFT", now),
+      monsterHp: 1, // 한 방에 처치 → createCombatRuntime로 리셋.
+      comboGauge: 50,
+      comboStep: 2,
+    };
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.killed).toBe(true);
+    expect(step.combat.attackHistory).toEqual([]);
+    expect(step.combat.comboStep).toBe(0);
+    expect(step.combat.comboGauge).toBe(0);
+  });
+
+  it("넉다운·보스 타임아웃 후 런타임도 콤보 상태가 초기화된다", () => {
+    // 넉다운: 낮은 HP에서 몬스터 공격으로 넉다운 → resolveKnockdown이 createCombatRuntime 사용.
+    const start = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    const lowHp: CombatRuntime = {
+      ...start,
+      boxerHp: 1,
+      attackHistory: [{ attackType: "JAB", hand: "LEFT" }],
+      comboGauge: 30,
+      comboStep: 1,
+      nextMonsterAttackAt: 100,
+      nextAttackAt: 10_000,
+    };
+    const ko = stepCombat(boxer, lowHp, 0.9, 100);
+    expect(ko.knockedDown).toBe(true);
+    expect(ko.combat.attackHistory).toEqual([]);
+    expect(ko.combat.comboGauge).toBe(0);
+    expect(ko.combat.comboStep).toBe(0);
+
+    // 보스 타임아웃: 제한 시각 경과 후 파밍 전환 시에도 초기화.
+    const boss: CombatRuntime = {
+      ...createCombatRuntime(boxer, { chapter: 1, stage: 5 }, 0),
+      attackHistory: [{ attackType: "JAB", hand: "LEFT" }],
+      comboGauge: 40,
+      comboStep: 1,
+    };
+    const timedOut = resolveBossTimeout(boxer, boss, 31_000);
+    expect(timedOut.attackHistory).toEqual([]);
+    expect(timedOut.comboGauge).toBe(0);
+    expect(timedOut.comboStep).toBe(0);
+  });
+
+  it("콤보 게이지: 잽 1회당 +COMBO_GAUGE_PER_JAB, COMBO_GAUGE_MAX에서 클램프된다", () => {
+    let combat = withHistory([], ["JAB"], null, now);
+    combat = { ...combat, comboGauge: 0 };
+    // 잽을 한 번 친 뒤 게이지가 증가한다(잽만 ready로 두고 매번 잽 재오픈).
+    const reopenJab = (c: CombatRuntime, t: number): CombatRuntime => ({
+      ...c,
+      nextReadyAt: { ...c.nextReadyAt, JAB: t },
+      nextAttackAt: t,
+    });
+    const step1 = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step1.attack?.attackType).toBe("JAB");
+    expect(step1.combat.comboGauge).toBe(COMBO_GAUGE_PER_JAB);
+
+    // 상한까지 반복.
+    let c = step1.combat;
+    let t = now;
+    for (let i = 0; i < 50; i += 1) {
+      t += 1;
+      c = reopenJab(c, t);
+      c = resolveAttack(boxer, c, NO_CRIT, t).combat;
+    }
+    expect(c.comboGauge).toBe(COMBO_GAUGE_MAX);
+  });
+
+  it("콤보 게이지: 잽 외 공격은 게이지를 올리지 않는다", () => {
+    const combat = { ...withHistory([], ["STRAIGHT"], null, now), comboGauge: 20 };
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("STRAIGHT");
+    expect(step.combat.comboGauge).toBe(20);
+  });
+
+  it("공격 선택 정책: 콤보 다음 단계가 ready면 우선순위 폴백보다 우선된다", () => {
+    const now2 = 100_000;
+    // 원투 진행 중([JAB]) 스트레이트·어퍼·훅이 모두 ready여도 콤보 다음 단계인 스트레이트를 우선한다.
+    const allReady: Record<AttackType, number> = { JAB: now2, STRAIGHT: now2, HOOK: now2, UPPER: now2 };
+    expect(selectAttackType(allReady, now2, [{ attackType: "JAB", hand: "LEFT" }])).toBe("STRAIGHT");
+    // 콤보 진행이 없으면(history 비어있음) 기존 우선순위(어퍼 최우선).
+    expect(selectAttackType(allReady, now2, [])).toBe("UPPER");
+    // 콤보 다음 단계(스트레이트)가 ready가 아니면 폴백(어퍼).
+    expect(
+      selectAttackType({ ...allReady, STRAIGHT: now2 + 1 }, now2, [{ attackType: "JAB", hand: "LEFT" }]),
+    ).toBe("UPPER");
+  });
+
+  it("nextComboBeat/matchCombination 순수 함수가 손까지 일치를 요구한다", () => {
+    expect(nextComboBeat([{ attackType: "JAB", hand: "LEFT" }])).toEqual({
+      attackType: "STRAIGHT",
+      hand: "RIGHT",
+    });
+    // 진행 중 콤보가 없으면(빈 history) null → 콤보 시작은 selectAttackType의 우선순위 폴백이 맡는다.
+    expect(nextComboBeat([])).toBeNull();
+    expect(
+      matchCombination([
+        { attackType: "JAB", hand: "LEFT" },
+        { attackType: "STRAIGHT", hand: "RIGHT" },
+      ]),
+    ).toBe("ONE_TWO");
+    // 손 불일치(right_straight 대신 left).
+    expect(
+      matchCombination([
+        { attackType: "JAB", hand: "LEFT" },
+        { attackType: "STRAIGHT", hand: "LEFT" },
+      ]),
+    ).toBeNull();
   });
 });
 
