@@ -6,7 +6,7 @@
 
 ## 참고 문서
 
-- `docs/기획/combat/boss.md`, `docs/기획/combat/combinations.md`, `docs/기획/systems/stats-and-formulas.md`
+- `docs/combat/boss.md`, `docs/combat/combinations.md`, `docs/systems/stats-and-formulas.md`
 
 ## 작업 범위
 

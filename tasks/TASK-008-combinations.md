@@ -6,7 +6,7 @@
 
 ## 참고 문서
 
-- `docs/기획/combat/combinations.md`, `docs/기획/combat/basic-attacks.md`
+- `docs/combat/combinations.md`, `docs/combat/basic-attacks.md`
 
 ## 작업 범위
 

@@ -74,6 +74,6 @@
 ## 관련 문서
 
 - [앱인토스 출시 전략](./platform-apps-in-toss.md)
-- [MVP 범위](./기획/docs/mvp-scope.md)
+- [MVP 범위](../overview/mvp-scope.md)
 - [게임 등급분류 준비](./game-rating.md)
 - [기술 스택](./technical-stack.md)

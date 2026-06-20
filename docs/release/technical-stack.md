@@ -87,6 +87,6 @@ src/
 ## 관련 문서
 
 - [앱인토스 출시 전략](./platform-apps-in-toss.md)
-- [데이터 모델](./기획/docs/data-model.md)
-- [핵심 루프](./기획/docs/core-loop.md)
-- [MVP 범위](./기획/docs/mvp-scope.md)
+- [데이터 모델](../systems/data-model.md)
+- [핵심 루프](../overview/core-loop.md)
+- [MVP 범위](../overview/mvp-scope.md)

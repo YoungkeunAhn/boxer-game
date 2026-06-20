@@ -6,8 +6,8 @@
 
 ## 참고 문서
 
-- `docs/기획/skills/equip.md`, `docs/기획/skills/infighter-skills.md`, `docs/기획/skills/out-boxer-skills.md`
-- `docs/기획/boxer/infighter.md`, `docs/기획/boxer/out-boxer.md`
+- `docs/skills/equip.md`, `docs/skills/infighter-skills.md`, `docs/skills/out-boxer-skills.md`
+- `docs/boxer/infighter.md`, `docs/boxer/out-boxer.md`
 
 ## 작업 범위
 

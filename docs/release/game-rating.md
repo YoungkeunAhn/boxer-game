@@ -65,4 +65,4 @@
 
 - [앱인토스 출시 전략](./platform-apps-in-toss.md)
 - [출시 체크리스트](./release-checklist.md)
-- [MVP 범위](./기획/docs/mvp-scope.md)
+- [MVP 범위](../overview/mvp-scope.md)

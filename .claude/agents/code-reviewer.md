@@ -33,7 +33,7 @@ model: opus
 - **오버플로우 방지**: 수치 계산은 `MAX_SAFE_GAME_INTEGER` 로 클램프되어야 한다.
 - **타이머 단일**: 자동 전투 타이머는 하나만 유지(`scheduleNext`/`clearTimer`). 중복 스케줄/누수 의심 시 지적.
 - **스테이지 접근**: 스테이지는 하드코딩하지 말고 `getStageDefinition`/`getNextStagePosition`/`getPreviousNormalStagePosition` 를 거쳐야 한다.
-- **버전 동기화**: 수식/스테이지/저장 shape 가 바뀌면 `constants.ts` 의 `BALANCE_VERSION`/`SCHEMA_VERSION` 범프와 `docs/기획/` 갱신이 따라야 한다. 누락 시 지적(불일치 저장은 로드 시 `invalid` 로 거부됨).
+- **버전 동기화**: 수식/스테이지/저장 shape 가 바뀌면 `constants.ts` 의 `BALANCE_VERSION`/`SCHEMA_VERSION` 범프와 `docs/` 갱신이 따라야 한다. 누락 시 지적(불일치 저장은 로드 시 `invalid` 로 거부됨).
 - **저장 격리/검증**: 저장 로직은 `save.ts` 에 격리. 로드 시 모든 필드는 타입가드로 검증되어야 한다(외부 입력을 신뢰하지 말 것).
 - **MVP 범위**: PVP/길드/시즌패스/결제/광고 같은 제외 기능이 임의로 추가됐으면 지적.
 - **주입 의존**: 스토어는 `now`/`random`/`schedule`/`save` 등을 주입받는 구조를 유지해야 한다(테스트 가능성).

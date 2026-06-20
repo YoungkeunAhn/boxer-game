@@ -6,8 +6,8 @@
 
 ## 참고 문서
 
-- `docs/기획/combat/monster-attacks.md`, `docs/기획/boxer/infighter.md`, `docs/기획/boxer/out-boxer.md`
-- `docs/기획/systems/stats-and-formulas.md`
+- `docs/combat/monster-attacks.md`, `docs/boxer/infighter.md`, `docs/boxer/out-boxer.md`
+- `docs/systems/stats-and-formulas.md`
 
 ## 작업 범위
 

@@ -4,7 +4,7 @@
 핵심은 두 가지 안전장치다.
 
 1. **GitHub Actions CI** — PR이 열리면 `node tools/check.mjs full`(타입체크 + 전체 테스트 + 프로덕션 빌드)을
-   GitHub 러너에서 자동 실행한다. 워크플로우는 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+   GitHub 러너에서 자동 실행한다. 워크플로우는 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml).
 2. **자동 머지** — CI가 green이면 사람 개입 없이 squash 머지하고 원격 브랜치를 지운다.
 
 ## 전체 사이클

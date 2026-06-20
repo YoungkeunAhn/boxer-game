@@ -100,6 +100,5 @@ npm.cmd run e2e:report     # 직전 실행 리포트(playwright-report/) 열기
 
 ## 관련 문서
 
-- [기획 진입점](./기획/README.md)
-- [출시 체크리스트](./release-checklist.md)
-- [작업 병목 및 개선 현황](./병목개선.md)
+- [기획 진입점](../README.md)
+- [출시 체크리스트](../release/release-checklist.md)

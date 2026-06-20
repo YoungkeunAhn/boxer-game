@@ -40,7 +40,7 @@ JAB! → STRAIGHT! → LEFT HOOK! → RIGHT UPPER! → FULL COMBO!
   - 원투(`ONE_TWO`): 마무리 **스트레이트 데미지 ×1.3** (`ONE_TWO_STRAIGHT_DAMAGE_MULT`).
   - 원투 훅(`ONE_TWO_HOOK`): 마무리 **훅 치명타 확률 +0.2** 가산, 최종 확률 1.0 클램프 (`ONE_TWO_HOOK_CRIT_BONUS`).
   - 풀 콤비네이션(`FULL_COMBO`): 마무리 **어퍼 데미지 ×1.5** (`FULL_COMBO_UPPER_DAMAGE_MULT`).
-  - 풀 콤비네이션의 **그로기 증가**는 TASK-009 연계 자리로만 둔다(`FULL_COMBO_GROGGY_BONUS=0`, 현재 미사용).
+  - 풀 콤비네이션의 **그로기 증가**는 TASK-009에서 활성화했다. 마무리 어퍼가 보스 그로기를 기본 어퍼 누적에 더해 **+20** 더 쌓는다(`FULL_COMBO_GROGGY_BONUS=20`, 0→20). 상세는 [보스전](./boss.md) 그로기 절·[능력치와 수식](../systems/stats-and-formulas.md) 참고.
 - 콤보 게이지: 잽 1회당 **+10**, 상한 **100** (`COMBO_GAUGE_PER_JAB`, `COMBO_GAUGE_MAX`). 게이지 소비·효과·증가량 강화는 후속 태스크.
 - 콤보 끊김 조건(가정): 1차 구현은 **시퀀스 이탈**(직전 타격들이 콤보 prefix와 어긋남)과 **킬·스테이지 전이·넉다운·보스 타임아웃 리셋**만으로 끊는다.
   - 시퀀스 매칭은 최근 타격 시퀀스(`attackHistory`, 상한 4타)의 끝부분이 콤보 시퀀스와 정확히 일치할 때만 발동하므로, 이탈한 타격은 자동으로 콤보를 깬다.

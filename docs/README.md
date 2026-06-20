@@ -53,13 +53,19 @@
 - **systems** — [게임 시스템](./systems/game-systems.md) · [능력치와 수식](./systems/stats-and-formulas.md) · [스테이지 성장과 오프라인](./systems/stage-and-offline.md) · [콘텐츠 데이터](./systems/content-data.md) · [데이터 모델](./systems/data-model.md) · [저장 모델](./systems/save-model.md)
 - **progress** — [유저 플로우](./progress/user-flow.md) · [개발 로드맵](./progress/development-roadmap.md) · [개발 순서](./progress/dev-order.md)
 
-## 앱인토스 출시 관련 문서
+## 출시(release) 문서
 
-- [앱인토스 출시 전략](../platform-apps-in-toss.md)
-- [출시 체크리스트](../release-checklist.md)
-- [게임 등급분류 준비](../game-rating.md)
-- [기술 스택](../technical-stack.md)
-- [브라우저 스모크 체크리스트](../browser-smoke-checklist.md)
+- [앱인토스 출시 전략](./release/platform-apps-in-toss.md)
+- [출시 체크리스트](./release/release-checklist.md)
+- [게임 등급분류 준비](./release/game-rating.md)
+- [기술 스택](./release/technical-stack.md)
+
+## 운영(process) 문서
+
+- [워크플로우 인덱스](./process/workflow-index.md)
+- [dev 개발 워크플로우](./process/dev-workflow.md)
+- [git 워크플로우](./process/git-workflow.md)
+- [브라우저 스모크 체크리스트](./process/browser-smoke-checklist.md)
 
 ## 문서 작성 원칙
 

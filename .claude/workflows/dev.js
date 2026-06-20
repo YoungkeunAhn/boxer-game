@@ -24,7 +24,7 @@ if (!taskId && !freeSpec) {
 }
 
 const SPEC_REF = taskId
-  ? `tasks/${taskId}-*.md (이 태스크 문서와 그 안의 "참고 문서"로 명시된 docs/기획/** 파일들을 모두 읽어라)`
+  ? `tasks/${taskId}-*.md (이 태스크 문서와 그 안의 "참고 문서"로 명시된 docs/** 파일들을 모두 읽어라)`
   : `아래 자유 스펙:\n${freeSpec}`
 
 const RULES = `프로젝트 규칙(CLAUDE.md / tasks/README.md 공통 규칙) 엄수:

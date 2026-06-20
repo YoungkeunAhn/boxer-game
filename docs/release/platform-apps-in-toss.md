@@ -74,4 +74,4 @@
 - [출시 체크리스트](./release-checklist.md)
 - [게임 등급분류 준비](./game-rating.md)
 - [기술 스택](./technical-stack.md)
-- [MVP 범위](./기획/docs/mvp-scope.md)
+- [MVP 범위](../overview/mvp-scope.md)
