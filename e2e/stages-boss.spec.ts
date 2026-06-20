@@ -2,7 +2,7 @@ import {
   test,
   expect,
   gotoFrozen,
-  seedSaveV2,
+  seedSave,
   createBoxer,
   enterBoss,
   hpNow,
@@ -19,7 +19,7 @@ async function bossSeconds(page: import("@playwright/test").Page): Promise<numbe
 }
 
 async function seedAndGo(page: import("@playwright/test").Page, options: SeedOptions) {
-  await seedSaveV2(page, options);
+  await seedSave(page, options);
   await gotoFrozen(page);
 }
 

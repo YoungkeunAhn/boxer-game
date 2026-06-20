@@ -5,11 +5,14 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v2";
+export const SAVE_KEY = "boxer-game.save.v3";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const BALANCE_VERSION = 2;
+
+export type BoxerType = "INFIGHTER" | "OUT_BOXER";
+export type Gender = "MALE" | "FEMALE";
 
 export type UpgradeKey =
   | "attackPower"
@@ -20,6 +23,8 @@ export type UpgradeKey =
 
 export type SeedOptions = {
   name?: string;
+  boxerType?: BoxerType;
+  gender?: Gender;
   gold?: number;
   totalKills?: number;
   chapter?: number;
@@ -37,10 +42,12 @@ const ZERO_LEVELS: Record<UpgradeKey, number> = {
   goldBonus: 0,
 };
 
-// save.ts의 isSaveData를 통과하는 v2 저장 JSON을 만든다.
+// save.ts의 isSaveData를 통과하는 v3 저장 JSON을 만든다.
 export function buildSaveJson(options: SeedOptions = {}): string {
   const {
     name = "테스트복서",
+    boxerType = "INFIGHTER",
+    gender = "MALE",
     gold = 0,
     totalKills = 0,
     chapter = 1,
@@ -57,6 +64,8 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     boxer: {
       id: "player_boxer",
       name,
+      boxerType,
+      gender,
       gold,
       totalKills,
       upgradeLevels: { ...ZERO_LEVELS, ...upgradeLevels },
@@ -94,7 +103,7 @@ export async function reloadFrozen(page: Page): Promise<void> {
   await freezeClock(page);
 }
 
-export async function seedSaveV2(page: Page, options: SeedOptions = {}): Promise<void> {
+export async function seedSave(page: Page, options: SeedOptions = {}): Promise<void> {
   const json = buildSaveJson(options);
   await page.addInitScript(
     ([key, value]) => {
@@ -121,7 +130,7 @@ export async function seedLegacyV1(page: Page): Promise<void> {
   );
 }
 
-export async function seedCorruptV2(page: Page, raw = "{not-json"): Promise<void> {
+export async function seedCorruptSave(page: Page, raw = "{not-json"): Promise<void> {
   await page.addInitScript(
     ([key, value]) => {
       try {
@@ -143,7 +152,7 @@ export async function createBoxer(page: Page, name = "테스트복서"): Promise
 // 보스 진입: 보스 위치 저장을 불러오면 게임이 4스테이지 파밍으로 강등하므로,
 // 4스테이지 파밍 상태에서 "보스 다시 도전하기"로 실제 보스에 진입한다.
 export async function enterBoss(page: Page, options: SeedOptions = {}): Promise<void> {
-  await seedSaveV2(page, { chapter: 1, stage: 4, isFarming: true, ...options });
+  await seedSave(page, { chapter: 1, stage: 4, isFarming: true, ...options });
   await gotoFrozen(page);
   await page.getByRole("button", { name: /보스 다시 도전하기/ }).click();
   await expect(page.getByTestId("combat-badge")).toHaveText("BOSS");

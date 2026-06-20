@@ -35,9 +35,16 @@ type StageDefinition = StagePosition & {
 ## 플레이어와 전투 런타임
 
 ```ts
+// 전투 스타일 타입. 전투 성능 차이는 전적으로 타입이 결정한다.
+type BoxerType = "INFIGHTER" | "OUT_BOXER";
+// 성별은 외형·모션 식별자 전용이며 전투 성능에는 영향이 없다.
+type Gender = "MALE" | "FEMALE";
+
 type Boxer = {
   id: string;
   name: string;
+  boxerType: BoxerType;
+  gender: Gender;
   gold: number;
   totalKills: number;
   upgradeLevels: UpgradeLevels;
@@ -55,8 +62,9 @@ type CombatRuntime = {
 - `CombatStats`는 `UpgradeLevels`에서 계산하며 저장하지 않는다.
 - `CombatRuntime`은 메모리 상태다. 몬스터 HP와 타이머 시각은 저장하지 않는다.
 - `isFarming`이 참이면 같은 장 4스테이지 처치 후 위치를 유지하고 새 몬스터를 만든다.
+- `boxerType`/`gender`는 생성 시 한 번 정해지고 변하지 않는다. 타입별 전투 보정 골격은 `constants.ts`의 `BOXER_TYPE_MODIFIERS`에 자리만 잡혀 있고(가정: 모두 1.0 중립), 실제 계수는 HP/회피/카운터 도입 태스크에서 적용한다.
 
-저장 타입(`SaveDataV2`), 검증 규칙, 복원·오프라인 정산은 [저장 모델](./save-model.md)로 분리한다.
+저장 타입(`SaveDataV3`), 검증 규칙, 복원·오프라인 정산은 [저장 모델](./save-model.md)로 분리한다.
 
 ## 파생 데이터
 
@@ -66,9 +74,9 @@ type CombatRuntime = {
 
 ## 수정내용2 확장 (가정)
 
-가정: `수정내용2` 도입 시 다음 필드 추가와 스키마 버전 상향이 필요하다. 형식은 미확정이며 확정 시 본 문서·타입·밸런스 버전을 함께 갱신한다.
+진행 상황: 복서 타입(`BoxerType`)·성별(`Gender`)은 도입 완료(`schemaVersion: 3`). 나머지는 후속 태스크에서 추가하며 형식이 미확정이라 확정 시 본 문서·타입·밸런스 버전을 함께 갱신한다.
 
-- `Boxer`: 타입(`infighter`/`outBoxer`), 성별, 복서 HP·HP 강화 레벨, 장착 스킬 슬롯. → [복서 타입](../boxer/types.md), [스킬 장착 구조](../skills/equip.md)
+- `Boxer`: 타입(`INFIGHTER`/`OUT_BOXER`)·성별(`MALE`/`FEMALE`) 도입 완료. 복서 HP·HP 강화 레벨, 장착 스킬 슬롯은 미도입. → [복서 타입](../boxer/types.md), [스킬 장착 구조](../skills/equip.md)
 - 강화 키 확장: 체력·방어·회피·카운터 등 신규 강화. → [몬스터 공격](../combat/monster-attacks.md)
 - `CombatRuntime`: 복서 현재 HP, 보스 그로기 수치 등 신규 런타임 값(저장 제외). → [보스전](../combat/boss.md)
 

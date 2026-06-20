@@ -3,6 +3,8 @@ import { STAGES_BALANCE_VERSION } from "../data/stages";
 import {
   BALANCE_VERSION,
   BOSS_TIME_LIMIT_MS,
+  BOXER_TYPE_MODIFIERS,
+  BOXER_TYPES,
   INITIAL_COMBAT_STATS,
   INITIAL_UPGRADE_LEVELS,
   OFFLINE_MAX_DURATION_MS,
@@ -27,9 +29,21 @@ describe("게임 기준 상수", () => {
       critDamage: 0,
       goldBonus: 0,
     });
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
     expect(BALANCE_VERSION).toBe(2);
     expect(STAGES_BALANCE_VERSION).toBe(BALANCE_VERSION);
+  });
+
+  it("타입 보정 골격은 전투에 영향이 없도록 모두 중립(1.0)이다", () => {
+    for (const type of BOXER_TYPES) {
+      expect(BOXER_TYPE_MODIFIERS[type]).toEqual({
+        maxHpMultiplier: 1.0,
+        defenseMultiplier: 1.0,
+        damageReductionMultiplier: 1.0,
+        evasionMultiplier: 1.0,
+        counterMultiplier: 1.0,
+      });
+    }
   });
 
   it("강화 비용, 상한, 보스와 오프라인 제한을 고정한다", () => {

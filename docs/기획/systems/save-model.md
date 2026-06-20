@@ -5,29 +5,31 @@
 ## 저장 타입
 
 ```ts
-type SaveDataV2 = {
-  schemaVersion: 2;
+type SaveDataV3 = {
+  schemaVersion: 3;
   balanceVersion: 2;
   savedAt: string;
-  boxer: Boxer;
+  boxer: Boxer; // boxerType·gender 포함
   position: StagePosition;
   isFarming: boolean;
 };
 ```
 
-- 저장 키는 `boxer-game.save.v2`다.
+- 저장 키는 `boxer-game.save.v3`다.
+- 성별은 외형 전용이라 전투 보정이 없으므로 `balanceVersion`은 v2(`2`)를 유지한다. 타입 보정을 실제로 적용하는 후속 태스크에서 올린다.
 - 날짜는 UTC ISO 8601 문자열로 저장한다.
 - 저장에는 정적 테마 데이터, 현재 몬스터 HP, 다음 공격 시각, 보스 종료 시각을 포함하지 않는다.
 - 로드 시 위치에서 `StageDefinition`과 새 최대 HP를 생성한다.
 
 ## 저장 및 검증 규칙
 
-- `schemaVersion === 2`, `balanceVersion === 2`를 확인한다.
+- `schemaVersion === 3`, `balanceVersion === 2`를 확인한다.
 - 복서 이름은 기존 UI의 길이·공백 검증을 적용한다.
+- `boxerType`은 `INFIGHTER`/`OUT_BOXER`, `gender`는 `MALE`/`FEMALE` 중 하나여야 한다.
 - 골드, 총 처치 수와 강화 레벨은 음수가 아닌 유한한 안전한 정수여야 한다.
 - 장은 1 이상, 스테이지는 1~5여야 한다.
 - 반복 파밍 상태는 보스가 아닌 위치에만 저장하며, 정상 전이는 같은 장 4스테이지를 사용한다.
-- 지원하지 않는 v1 키는 삭제하거나 덮어쓰지 않고 호환 불가 안내에만 사용한다.
+- 지원하지 않는 구버전 키(`...v2`/`...v1`)는 타입·성별 정보가 없어 자동 마이그레이션할 수 없다. 삭제·덮어쓰지 않고 호환 불가(legacy) 안내에만 사용한다. (가정: 마이그레이션을 택한다면 기본값 `INFIGHTER`/`MALE`을 부여해 v3로 승격할 수 있으나, 사용자가 의도한 외형이 아닐 수 있어 새 게임 진입을 기본으로 둔다.)
 - 저장소 접근·파싱·직렬화 오류는 화면을 중단시키지 않고 실패 상태로 반환한다.
 - 일반 변경은 최대 초당 한 번 저장하고 강화·보스 결과·백그라운드·종료는 즉시 저장한다.
 
@@ -42,7 +44,7 @@ type SaveDataV2 = {
 
 ## 수정내용2 확장 (가정)
 
-가정: `수정내용2` 도입 시 복서 타입·성별·복서 HP·장착 스킬 필드가 추가되며 `schemaVersion` 상향이 필요하다. 형식 확정 시 본 문서와 [데이터 모델](./data-model.md)을 함께 갱신한다.
+진행 상황: 복서 타입·성별이 추가되어 `schemaVersion`을 3으로 올렸다(v3). 복서 HP·장착 스킬 등 나머지 필드는 후속 태스크에서 추가하며 그때 스키마 버전을 다시 올린다. 형식 확정 시 본 문서와 [데이터 모델](./data-model.md)을 함께 갱신한다.
 
 ## 관련 문서
 

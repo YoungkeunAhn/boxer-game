@@ -2,7 +2,7 @@ import {
   test,
   expect,
   gotoFrozen,
-  seedSaveV2,
+  seedSave,
   createBoxer,
   statValue,
   upgradeButton,
@@ -31,7 +31,7 @@ test.describe("강화", () => {
   test("공격력 0레벨 비용은 10골드, 강화 후 피해가 floor(10×1.2)=12로 오른다", async ({
     page,
   }) => {
-    await seedSaveV2(page, { gold: 1000 });
+    await seedSave(page, { gold: 1000 });
     await gotoFrozen(page);
 
     await expect(upgradeButton(page, "attackPower")).toHaveText("10 G");
@@ -58,7 +58,7 @@ test.describe("강화", () => {
   test("공격속도를 강화하면 표시 속도가 빨라지고 자동 공격이 단일 스트림으로 진행된다", async ({
     page,
   }) => {
-    await seedSaveV2(page, { gold: 1000 });
+    await seedSave(page, { gold: 1000 });
     await gotoFrozen(page);
 
     await expect(statValue(page, "attackSpeed")).toHaveText("1.0회/초");
@@ -75,7 +75,7 @@ test.describe("강화", () => {
   });
 
   test("상한(5.0회/초, 50%, 5.0배, +500%)에서 MAX 상태가 표시된다", async ({ page }) => {
-    await seedSaveV2(page, {
+    await seedSave(page, {
       gold: 1000,
       upgradeLevels: { attackSpeed: 40, critRate: 45, critDamage: 30, goldBonus: 100 },
     });
@@ -93,7 +93,7 @@ test.describe("강화", () => {
   });
 
   test("빠른 연속 탭으로 비용·레벨이 중복 반영되지 않는다", async ({ page }) => {
-    await seedSaveV2(page, { gold: 10 }); // 공격력 1회 강화 비용만 보유
+    await seedSave(page, { gold: 10 }); // 공격력 1회 강화 비용만 보유
     await gotoFrozen(page);
 
     const button = upgradeButton(page, "attackPower");

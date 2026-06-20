@@ -34,6 +34,14 @@
   overflow-wrap: anywhere;
 }
 
+.subtitle {
+  margin: 5px 0 0;
+  color: #9fa7b8;
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .description {
   margin: 7px 0 0;
   color: #abb3c5;

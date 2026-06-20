@@ -12,6 +12,8 @@ import type { Boxer } from "./types";
 const boxer: Boxer = {
   id: "player",
   name: "테스트 복서",
+  boxerType: "INFIGHTER",
+  gender: "MALE",
   gold: 0,
   totalKills: 0,
   upgradeLevels: {

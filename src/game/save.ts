@@ -1,9 +1,21 @@
 import { getStageDefinition } from "../data/stages";
-import { BALANCE_VERSION, SCHEMA_VERSION, UPGRADE_MAX_LEVELS } from "./constants";
-import type { Boxer, SaveDataV2, StagePosition, UpgradeKey, UpgradeLevels } from "./types";
+import { BALANCE_VERSION, BOXER_TYPES, GENDERS, SCHEMA_VERSION, UPGRADE_MAX_LEVELS } from "./constants";
+import type {
+  Boxer,
+  BoxerType,
+  Gender,
+  SaveDataV3,
+  StagePosition,
+  UpgradeKey,
+  UpgradeLevels,
+} from "./types";
 
-export const SAVE_KEY = "boxer-game.save.v2";
-export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
+export const SAVE_KEY = "boxer-game.save.v3";
+// 가정: 타입·성별 정보가 없는 구버전 저장(v2/v1)은 자동 마이그레이션하지 않고 삭제·덮어쓰기 없이
+// legacy로만 안내한다. 마이그레이션을 택한다면 INITIAL/DEFAULT 타입·성별(인파이터/남자)을 부여해
+// v3로 승격하는 방안이 가능하지만, 사용자가 의도한 외형이 아닐 수 있어 새 게임 진입을 기본으로 둔다.
+export const LEGACY_SAVE_KEYS = ["boxer-game.save.v2", "boxer-game.save.v1"] as const;
+export const LEGACY_SAVE_KEY = LEGACY_SAVE_KEYS[0];
 const TEMP_SAVE_KEY = `${SAVE_KEY}.temp`;
 
 export { BALANCE_VERSION, SCHEMA_VERSION } from "./constants";
@@ -17,7 +29,7 @@ export type SaveSnapshot = {
 };
 
 export type LoadGameResult =
-  | { status: "loaded"; data: SaveDataV2 }
+  | { status: "loaded"; data: SaveDataV3 }
   | { status: "empty" }
   | { status: "legacy" }
   | { status: "invalid" }
@@ -53,6 +65,14 @@ function isUpgradeLevels(value: unknown): value is UpgradeLevels {
   });
 }
 
+function isBoxerType(value: unknown): value is BoxerType {
+  return BOXER_TYPES.includes(value as BoxerType);
+}
+
+function isGender(value: unknown): value is Gender {
+  return GENDERS.includes(value as Gender);
+}
+
 function isBoxer(value: unknown): value is Boxer {
   if (typeof value !== "object" || value === null) return false;
   const boxer = value as Record<string, unknown>;
@@ -62,6 +82,8 @@ function isBoxer(value: unknown): value is Boxer {
     typeof boxer.name === "string" &&
     boxer.name.trim().length > 0 &&
     boxer.name.trim().length <= 16 &&
+    isBoxerType(boxer.boxerType) &&
+    isGender(boxer.gender) &&
     isSafeNonNegativeInteger(boxer.gold) &&
     isSafeNonNegativeInteger(boxer.totalKills) &&
     isUpgradeLevels(boxer.upgradeLevels)
@@ -86,7 +108,7 @@ function isStagePosition(value: unknown): value is StagePosition {
   }
 }
 
-function isSaveData(value: unknown): value is SaveDataV2 {
+function isSaveData(value: unknown): value is SaveDataV3 {
   if (typeof value !== "object" || value === null) return false;
   const save = value as Record<string, unknown>;
   return (
@@ -116,7 +138,7 @@ export function saveGame(
     return false;
   }
 
-  const data: SaveDataV2 = {
+  const data: SaveDataV3 = {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
     savedAt: now.toISOString(),
@@ -144,9 +166,9 @@ export function loadGame(
   try {
     const serialized = storage.getItem(SAVE_KEY);
     if (serialized === null) {
-      return storage.getItem(LEGACY_SAVE_KEY) === null
-        ? { status: "empty" }
-        : { status: "legacy" };
+      // 타입·성별이 없는 구버전(v2/v1) 저장은 자동 마이그레이션 불가 → 삭제 없이 legacy로만 안내.
+      const hasLegacy = LEGACY_SAVE_KEYS.some((key) => storage.getItem(key) !== null);
+      return hasLegacy ? { status: "legacy" } : { status: "empty" };
     }
 
     const parsed: unknown = JSON.parse(serialized);

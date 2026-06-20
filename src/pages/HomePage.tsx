@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect } from "react";
 import { CombatPanel } from "../components/CombatPanel";
+import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
 import { UpgradePanel } from "../components/UpgradePanel";
 import { useGameStore } from "../stores/gameStore";
@@ -10,12 +11,9 @@ export function HomePage() {
   const offlineSummary = useGameStore((state) => state.offlineSummary);
   const message = useGameStore((state) => state.message);
   const storageWarning = useGameStore((state) => state.storageWarning);
-  const legacySaveDetected = useGameStore((state) => state.legacySaveDetected);
-  const createBoxer = useGameStore((state) => state.createBoxer);
   const pause = useGameStore((state) => state.pause);
   const resume = useGameStore((state) => state.resume);
   const reset = useGameStore((state) => state.reset);
-  const [name, setName] = useState("");
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -34,48 +32,10 @@ export function HomePage() {
     };
   }, [pause, resume]);
 
-  function handleCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    createBoxer(name);
-  }
-
   if (!boxer) {
     return (
       <main className={styles.page}>
-        <section className={styles.creation}>
-          <p className={styles.kicker}>BOXER GROWTH PROJECT</p>
-          <h1 className={styles.title}>복서키우기</h1>
-          <p className={styles.subtitle}>
-            자동으로 몬스터를 쓰러뜨리고 강해져 보스에게 도전하세요.
-          </p>
-          {legacySaveDetected && (
-            <p className={styles.warning} role="alert">
-              이전 버전 저장 데이터는 새 전투 방식과 호환되지 않습니다. 기존 저장은
-              보존되며, 새 복서를 만들면 v2 진행이 시작됩니다.
-            </p>
-          )}
-          {storageWarning && (
-            <p className={styles.warning} role="alert">
-              {storageWarning}
-            </p>
-          )}
-          <form onSubmit={handleCreate}>
-            <label className={styles.label} htmlFor="boxer-name">
-              복서 이름
-            </label>
-            <input
-              className={styles.input}
-              id="boxer-name"
-              maxLength={16}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="무명 복서"
-              value={name}
-            />
-            <button className={styles.submit} type="submit">
-              커리어 시작하기
-            </button>
-          </form>
-        </section>
+        <BoxerCreation />
       </main>
     );
   }

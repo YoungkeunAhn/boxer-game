@@ -5,9 +5,9 @@ import {
   reloadFrozen,
   installClock,
   freezeClock,
-  seedSaveV2,
+  seedSave,
   seedLegacyV1,
-  seedCorruptV2,
+  seedCorruptSave,
   createBoxer,
   enterBoss,
   hpNow,
@@ -42,7 +42,7 @@ test.describe("저장·백그라운드·오프라인", () => {
   });
 
   test("저장을 불러오면 몬스터는 최대 HP에서 새로 시작한다", async ({ page }) => {
-    await seedSaveV2(page, { chapter: 1, stage: 2, gold: 100 });
+    await seedSave(page, { chapter: 1, stage: 2, gold: 100 });
     await gotoFrozen(page);
     expect(await hpNow(page)).toBe(await hpMax(page));
   });
@@ -83,7 +83,7 @@ test.describe("저장·백그라운드·오프라인", () => {
 
   test("8시간을 넘는 이탈도 최대 8시간까지만 인정된다", async ({ page }) => {
     const nineHoursMs = 9 * 60 * 60 * 1_000;
-    await seedSaveV2(page, { chapter: 1, stage: 1, savedAtMs: Date.parse("2026-01-01T00:00:00.000Z") - nineHoursMs });
+    await seedSave(page, { chapter: 1, stage: 1, savedAtMs: Date.parse("2026-01-01T00:00:00.000Z") - nineHoursMs });
     await gotoFrozen(page);
 
     // 8시간 상한: 처치 10,080 / 골드 50,400 (9시간이면 더 큼).
@@ -109,7 +109,7 @@ test.describe("저장·백그라운드·오프라인", () => {
       if (m.type() === "error") errors.push(m.text());
     });
 
-    await seedCorruptV2(page, "{이건 JSON 아님");
+    await seedCorruptSave(page, "{이건 JSON 아님");
     await gotoFrozen(page);
 
     await expect(page.locator("#boxer-name")).toBeVisible();

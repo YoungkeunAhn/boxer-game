@@ -2,7 +2,7 @@ import {
   test,
   expect,
   gotoFrozen,
-  seedSaveV2,
+  seedSave,
   createBoxer,
   enterBoss,
   hpNow,
@@ -27,7 +27,7 @@ test.describe("데스크톱·장시간 실행", () => {
 
   test("공격 한 번당 HP가 한 번만 감소한다(타이머 중복 없음)", async ({ page }) => {
     // 105HP(1-4) 몬스터를 기본 공격력(10)으로 단계별 처치하며 1타=1감소를 확인한다.
-    await seedSaveV2(page, { chapter: 1, stage: 4 });
+    await seedSave(page, { chapter: 1, stage: 4 });
     await gotoFrozen(page);
 
     const max = await hpMax(page);

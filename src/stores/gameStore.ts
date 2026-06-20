@@ -7,13 +7,13 @@ import {
   resolveBossTimeout,
   retryBoss as createBossRetry,
 } from "../game/combat";
-import { INITIAL_UPGRADE_LEVELS } from "../game/constants";
+import { DEFAULT_BOXER_TYPE, DEFAULT_GENDER, INITIAL_UPGRADE_LEVELS } from "../game/constants";
 import { calculateAttackIntervalMs, calculateCombatStats, purchaseUpgrade } from "../game/formulas";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
-import type { Boxer, CombatRuntime, GameState, UpgradeKey } from "../game/types";
+import type { Boxer, BoxerType, CombatRuntime, GameState, Gender, UpgradeKey } from "../game/types";
 
 type GameActions = {
-  createBoxer: (name: string) => void;
+  createBoxer: (name: string, boxerType?: BoxerType, gender?: Gender) => void;
   upgrade: (key: UpgradeKey) => void;
   retryBoss: () => void;
   pause: () => void;
@@ -107,10 +107,16 @@ function getInitialState(result: LoadGameResult, now: number): InitialStoreState
   };
 }
 
-function createDefaultBoxer(name: string): Boxer {
+function createDefaultBoxer(
+  name: string,
+  boxerType: BoxerType,
+  gender: Gender,
+): Boxer {
   return {
     id: "player_boxer",
     name: name.trim() || "무명 복서",
+    boxerType,
+    gender,
     gold: 0,
     totalKills: 0,
     upgradeLevels: { ...INITIAL_UPGRADE_LEVELS },
@@ -226,10 +232,10 @@ export function createGameStore(
     return {
       ...initial.state,
 
-      createBoxer: (name) => {
+      createBoxer: (name, boxerType = DEFAULT_BOXER_TYPE, gender = DEFAULT_GENDER) => {
         clearTimer();
         const now = dependencies.now();
-        const boxer = createDefaultBoxer(name);
+        const boxer = createDefaultBoxer(name, boxerType, gender);
         const combat = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, now);
         pausedAt = null;
         shouldPersistOffline = false;

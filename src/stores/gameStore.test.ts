@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createCombatRuntime } from "../game/combat";
 import { BALANCE_VERSION, INITIAL_UPGRADE_LEVELS, SCHEMA_VERSION } from "../game/constants";
 import type { SaveSnapshot } from "../game/save";
-import type { Boxer, SaveDataV2 } from "../game/types";
+import type { Boxer, SaveDataV3 } from "../game/types";
 import { createGameStore, type GameStoreDependencies } from "./gameStore";
 
 class FakeClock {
@@ -39,6 +39,8 @@ function boxer(overrides: Partial<Boxer> = {}): Boxer {
   return {
     id: "player",
     name: "테스트 복서",
+    boxerType: "INFIGHTER",
+    gender: "MALE",
     gold: 0,
     totalKills: 0,
     upgradeLevels: { ...INITIAL_UPGRADE_LEVELS },
@@ -48,8 +50,8 @@ function boxer(overrides: Partial<Boxer> = {}): Boxer {
 
 function savedData(
   clock: FakeClock,
-  overrides: Partial<SaveDataV2> = {},
-): SaveDataV2 {
+  overrides: Partial<SaveDataV3> = {},
+): SaveDataV3 {
   return {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
@@ -96,6 +98,21 @@ describe("자동 전투 게임 스토어", () => {
     expect(store.getState().combat?.position).toEqual({ chapter: 1, stage: 2 });
     expect(save).toHaveBeenCalledTimes(2);
     expect(clock.timers.size).toBe(1);
+  });
+
+  it("복서 생성 시 선택한 타입·성별을 저장하고 기본값은 인파이터·남자다", () => {
+    const clock = new FakeClock();
+    const store = createGameStore(dependencies(clock));
+    store.getState().createBoxer("아웃 복서", "OUT_BOXER", "FEMALE");
+    expect(store.getState().boxer).toEqual(
+      expect.objectContaining({ boxerType: "OUT_BOXER", gender: "FEMALE" }),
+    );
+
+    const fallback = createGameStore(dependencies(clock));
+    fallback.getState().createBoxer("기본 복서");
+    expect(fallback.getState().boxer).toEqual(
+      expect.objectContaining({ boxerType: "INFIGHTER", gender: "MALE" }),
+    );
   });
 
   it("공격속도 강화 시 현재 시각부터 새 공격 간격으로 단일 타이머를 다시 예약한다", () => {
