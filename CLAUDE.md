@@ -22,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `npm run e2e:install` — first-time only, downloads Chromium. `npm run e2e:report` / `npm run e2e:ui` — inspect failures / debug interactively.
   - `npm run check:e2e` — `check.mjs full` + E2E together (release gate).
   - Specs live in `e2e/*.spec.ts` (units are `src/**/*.test.ts`; `vitest.config.ts` keeps the two from cross-collecting). See `docs/browser-smoke-checklist.md` "자동화 현황" for which items stay manual.
+- **`dev` workflow (multi-agent dev cycle):** `/dev TASK-004` runs one task through plan → implement (on a new `feat/...` branch) → verify → review. User-triggered only; see `docs/dev-workflow.md` for args, branch naming, and the operating model.
 
 ## Reading files (project rule from AGENTS.md)
 
