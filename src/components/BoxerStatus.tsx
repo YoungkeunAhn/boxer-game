@@ -1,3 +1,4 @@
+import { BOXER_TYPE_META, GENDER_META } from "../game/constants";
 import { calculateCombatStats } from "../game/formulas";
 import type { Boxer } from "../game/types";
 import styles from "./GamePanel.module.css";
@@ -17,6 +18,9 @@ export function BoxerStatus({ boxer }: BoxerStatusProps) {
           <h2 className={styles.title} id="boxer-status-title">
             {boxer.name}
           </h2>
+          <p className={styles.subtitle} data-testid="boxer-identity">
+            {BOXER_TYPE_META[boxer.boxerType].label} · {GENDER_META[boxer.gender].label}
+          </p>
         </div>
         <span className={styles.badge}>{boxer.gold.toLocaleString()} G</span>
       </div>

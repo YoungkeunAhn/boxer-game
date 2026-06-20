@@ -2,7 +2,7 @@ import {
   test,
   expect,
   gotoFrozen,
-  seedSaveV2,
+  seedSave,
   createBoxer,
   enterBoss,
 } from "./fixtures";
@@ -55,7 +55,7 @@ test.describe("360px 모바일", () => {
   });
 
   test("긴 이름·큰 골드·처치 수가 가로 스크롤을 만들지 않는다", async ({ page }) => {
-    await seedSaveV2(page, {
+    await seedSave(page, {
       name: "가나다라마바사아자차카타파하",
       gold: 999_999_999,
       totalKills: 123_456_789,

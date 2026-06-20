@@ -1,0 +1,67 @@
+# TASK-007 기본 공격 4종·손 관리·쿨타임 (v1.3a)
+
+## 목표
+
+단일 `attackSpeed` 기반 공격을 **기본 공격 4종(잽·스트레이트·훅·어퍼)**으로 확장한다. 각 공격은 손(왼손/오른손)과 개별 쿨타임을 가진다. 이후 콤비네이션·그로기·스킬의 토대가 된다.
+
+## 참고 문서
+
+- `docs/기획/combat/basic-attacks.md`, `docs/기획/combat/combinations.md`(손 규칙), `docs/기획/presentation/animation.md`(애니메이션 키)
+- `docs/기획/systems/stats-and-formulas.md`
+
+## 작업 범위
+
+1. `src/game/types.ts`
+   - `export type AttackType = 'JAB' | 'STRAIGHT' | 'HOOK' | 'UPPER';`
+   - `export type Hand = 'LEFT' | 'RIGHT';`
+   - `CombatRuntime`에 공격별 `nextReadyAt: Record<AttackType, number>`와 `lastHand: Hand | null` 추가.
+   - `AttackResult`에 `attackType`, `hand` 추가.
+   - 저장 형태 변경 시 `SCHEMA_VERSION` 상향.
+2. `src/game/constants.ts`
+   - 공격별 쿨타임(문서 명시): 잽 1초 / 스트레이트 5초 / 훅 10초 / 어퍼 15초.
+   - 가정: 공격별 데미지 계수(잽 낮음~어퍼 매우 높음, `attackPower` 배수로), 잽 2연타 확률, 스트레이트 원투/카운터 보너스 등은 `가정:` 임시값. 손 고정: 잽=왼손, 스트레이트=오른손, 훅·어퍼=선택. `BALANCE_VERSION` 상향.
+3. `src/game/combat.ts`
+   - `resolveAttack`를 재설계: 매 틱 **쿨타임이 끝난 공격 중 어떤 것을 칠지** 선택한다. 가정: 선택 정책(예: 우선순위 어퍼>훅>스트레이트>잽 중 ready인 것, 또는 콤보 진행 우선 — TASK-008과 맞물림)을 `가정:`으로 명시하고 단순·결정적으로 시작.
+   - 손 선택 규칙(문서): 직전이 왼손이면 오른손 우선, 오른손이면 왼손 우선, 콤보 지정 손이 있으면 그 손 우선. 훅·어퍼에만 선택 적용(잽/스트레이트는 고정).
+   - 공격마다 데미지 계수·치명타 적용 후 쿨타임 갱신, `lastHand` 갱신.
+   - `advanceCombat`가 여러 공격을 시간순으로 처리하도록 유지(쿨타임이 서로 다르므로 `now` 기준 이벤트 큐 형태로 정리).
+4. `src/game/formulas.ts`: 공격별 데미지 계산 헬퍼(기존 치명타·클램프 재사용).
+5. `src/stores/gameStore.ts`: 마지막 공격(타입·손) 상태 노출(쿨타임 UI용 다음-준비 시각 포함).
+6. 테스트: 쿨타임별 발동 빈도, 손 교대 규칙, 손 고정 공격, 데미지 계수, 처치·골드가 기존과 동일하게 정산되는지.
+
+## 구현 원칙
+
+- 어떤 공격을 칠지 결정하는 정책은 단순·결정적으로 시작하고, 콤비네이션(TASK-008)이 이 정책을 정교화한다. 정책을 한 곳(순수 함수)에 모은다.
+- 오프라인 정산은 기대 타격 피해 모델을 4종 평균 효율로 일반화하거나, 가정: 기존 단순 정산을 유지하되 평균 DPS로 환산. 택한 방식을 명시·테스트.
+
+## 하지 않을 것
+
+- 콤비네이션 보너스·콤보 게이지(TASK-008), 그로기(TASK-009), 공격별 세부 강화(가정: 후속/선택 — 우선 4종 메커닉만).
+- 애니메이션 실제 적용(TASK-012). 여기서는 `attackType`/`hand`/애니메이션 키 매핑 규약만 노출.
+
+## 완료 기준
+
+- 4종 공격이 각자 쿨타임으로 자동 발동하고 손 교대 규칙을 지킨다.
+- 잽이 가장 자주, 어퍼가 가장 드물게 나간다(결정적 테스트로 검증).
+- 처치·골드·보스 진행이 기존과 동일하게 동작한다.
+- `node tools/check.mjs full` 통과.
+
+## 체크리스트
+
+- [ ] `types.ts`: `AttackType`(JAB/STRAIGHT/HOOK/UPPER)·`Hand`(LEFT/RIGHT) 추가
+- [ ] `types.ts`: `CombatRuntime`에 `nextReadyAt: Record<AttackType, number>`·`lastHand` 추가, `AttackResult`에 `attackType`·`hand` 추가
+- [ ] `types.ts`: 저장 형태 변경 시 `SCHEMA_VERSION` 상향
+- [ ] `constants.ts`: 공격별 쿨타임(잽1/스트레이트5/훅10/어퍼15초), 데미지 계수·손 고정 규칙 `가정:` 임시값
+- [ ] `constants.ts`: `BALANCE_VERSION` 상향
+- [ ] `combat.ts`: `resolveAttack` 재설계 — ready 공격 중 선택 정책(`가정:` 명시, 단순·결정적)
+- [ ] `combat.ts`: 손 선택 규칙(좌우 교대, 콤보 지정 손 우선, 훅·어퍼만 선택), 데미지 계수·치명타·쿨타임·`lastHand` 갱신
+- [ ] `combat.ts`: `advanceCombat`가 서로 다른 쿨타임을 `now` 기준 이벤트 큐로 시간순 처리
+- [ ] `formulas.ts`: 공격별 데미지 계산 헬퍼(치명타·클램프 재사용)
+- [ ] `gameStore.ts`: 마지막 공격(타입·손)·다음 준비 시각 상태 노출
+- [ ] 테스트: 쿨타임별 발동 빈도, 손 교대·고정 규칙, 데미지 계수, 처치·골드 정산 동일
+- [ ] 테스트: 잽 최다·어퍼 최소 발동을 결정적으로 검증, 오프라인 정산 방식 명시·검증
+- [ ] `node tools/check.mjs full` 통과
+
+## 결과 보고 형식
+
+수정 파일 / 공격 선택·손 정책(가정) / 쿨타임·데미지 계수 / 오프라인 정산 처리 / 버전 변경 / 남은 TODO / 다음 태스크.
