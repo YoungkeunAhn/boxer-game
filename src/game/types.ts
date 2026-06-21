@@ -57,6 +57,14 @@ export type Boxer = {
   gold: number;
   totalKills: number;
   upgradeLevels: UpgradeLevels;
+  // TASK-019(P3): 재화·플레이어 진행 필드. 저장 대상(v5→v6 SCHEMA 범프).
+  //  - diamond: 무과금 획득 프리미엄 재화(💎). 정수·음수불가·MAX_SAFE_GAME_INTEGER 클램프.
+  //    획득원은 퀘스트·업적·레벨업 보상(TASK-021/상점 골격), 사용처(sink)는 상점·타입전환 비용으로 후속 연결(TODO).
+  //  - playerLevel: 전투 강화 레벨과 별개인 플레이어 레벨(Lv). 최소 1.
+  //  - playerExp: 현재 레벨 내 누적 경험치(다음 레벨까지의 잔여 경험치). expToNext(level)은 저장하지 않고 순수 파생.
+  diamond: number;
+  playerLevel: number;
+  playerExp: number;
 };
 
 export type StagePosition = {
@@ -174,4 +182,7 @@ export type SaveDataV2 = {
 export type SaveDataV3 = SaveDataV2;
 export type SaveDataV4 = SaveDataV3;
 export type SaveDataV5 = SaveDataV4;
-export type SaveData = SaveDataV5;
+// TASK-019(P3): diamond/playerLevel/playerExp가 Boxer에 추가돼 SaveDataV2 파이프라인(boxer 통째 직렬화)을
+//   그대로 타고 저장된다. SaveData 형태 자체는 동일하나 boxer 내부 필드가 늘어 SCHEMA 5→6 범프.
+export type SaveDataV6 = SaveDataV5;
+export type SaveData = SaveDataV6;

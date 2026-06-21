@@ -1,4 +1,4 @@
-import { test, expect, gotoFrozen, seedSave, SAVE_KEY } from "./fixtures";
+import { test, expect, gotoFrozen, seedSave, SAVE_KEY, SCHEMA_VERSION } from "./fixtures";
 
 // docs/browser-smoke-checklist.md - 파이터 타입 전환(TASK-017)
 // 상태 전환(라벨·전용 스킬 표시·선택 카드 data-current)까지만 검증한다.
@@ -38,10 +38,10 @@ test.describe("파이터 타입 전환", () => {
     // 선택된 아웃복서 카드의 전용 스킬은 아웃복서 세트(예: 고스트스텝).
     await expect(page.getByTestId("type-switch-skills-OUT_BOXER-FEMALE")).toContainText("고스트스텝");
 
-    // 저장 스냅샷에도 새 타입/성별이 반영된다(SCHEMA v5 불변).
+    // 저장 스냅샷에도 새 타입/성별이 반영된다(현행 SCHEMA 기준).
     const saved = await page.evaluate((key) => window.localStorage.getItem(key), SAVE_KEY);
     const parsed = JSON.parse(saved as string);
-    expect(parsed.schemaVersion).toBe(5);
+    expect(parsed.schemaVersion).toBe(SCHEMA_VERSION);
     expect(parsed.boxer.boxerType).toBe("OUT_BOXER");
     expect(parsed.boxer.gender).toBe("FEMALE");
   });

@@ -4,17 +4,18 @@ import type {
   Boxer,
   BoxerType,
   Gender,
-  SaveDataV5,
+  SaveDataV6,
   StagePosition,
   UpgradeKey,
   UpgradeLevels,
 } from "./types";
 
-export const SAVE_KEY = "boxer-game.save.v5";
-// 가정: 회피/카운터(또는 HP/방어) 강화 레벨이 없는 구버전 저장(v4/v3/v2/v1)은 자동 마이그레이션하지
-// 않고 삭제·덮어쓰기 없이 legacy로만 안내한다. 마이그레이션을 택한다면 누락 강화 레벨을 0으로 부여해
-// v5로 승격하는 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다(tasks/README 공통 규칙).
+export const SAVE_KEY = "boxer-game.save.v6";
+// 가정: 재화·레벨(v5) 또는 그 이전(v4/v3/v2/v1) 저장은 자동 마이그레이션하지 않고 삭제·덮어쓰기 없이
+// legacy로만 안내한다. 마이그레이션을 택한다면 누락 필드(diamond/playerLevel/playerExp 등)에 초기값을
+// 부여해 v6으로 승격하는 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다(tasks/README 공통 규칙).
 export const LEGACY_SAVE_KEYS = [
+  "boxer-game.save.v5",
   "boxer-game.save.v4",
   "boxer-game.save.v3",
   "boxer-game.save.v2",
@@ -34,7 +35,7 @@ export type SaveSnapshot = {
 };
 
 export type LoadGameResult =
-  | { status: "loaded"; data: SaveDataV5 }
+  | { status: "loaded"; data: SaveDataV6 }
   | { status: "empty" }
   | { status: "legacy" }
   | { status: "invalid" }
@@ -64,6 +65,11 @@ function getBrowserStorage(): StorageAdapter | null {
 
 function isSafeNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+// TASK-019: 플레이어 레벨은 1 이상의 안전한 정수(0/음수/비정수/비유한 거부).
+function isSafePositiveInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 1;
 }
 
 function isUpgradeLevels(value: unknown): value is UpgradeLevels {
@@ -97,7 +103,11 @@ function isBoxer(value: unknown): value is Boxer {
     isGender(boxer.gender) &&
     isSafeNonNegativeInteger(boxer.gold) &&
     isSafeNonNegativeInteger(boxer.totalKills) &&
-    isUpgradeLevels(boxer.upgradeLevels)
+    isUpgradeLevels(boxer.upgradeLevels) &&
+    // TASK-019(P3): 재화·플레이어 레벨/경험치. 유한·세이프정수 범위 검증(누락/NaN/Infinity/음수/playerLevel<1 거부).
+    isSafeNonNegativeInteger(boxer.diamond) &&
+    isSafePositiveInteger(boxer.playerLevel) &&
+    isSafeNonNegativeInteger(boxer.playerExp)
   );
 }
 
@@ -119,7 +129,7 @@ function isStagePosition(value: unknown): value is StagePosition {
   }
 }
 
-function isSaveData(value: unknown): value is SaveDataV5 {
+function isSaveData(value: unknown): value is SaveDataV6 {
   if (typeof value !== "object" || value === null) return false;
   const save = value as Record<string, unknown>;
   return (
@@ -149,7 +159,7 @@ export function saveGame(
     return false;
   }
 
-  const data: SaveDataV5 = {
+  const data: SaveDataV6 = {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
     savedAt: now.toISOString(),

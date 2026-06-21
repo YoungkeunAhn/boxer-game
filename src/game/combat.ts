@@ -15,6 +15,7 @@ import {
   COMBO_GAUGE_MAX,
   COMBO_GAUGE_PER_JAB,
   COUNTER_BASE_DAMAGE_RATE,
+  EXP_PER_KILL,
   INFIGHTER_GUARD_COUNTER_RATE,
   KNOCKDOWN_PARTIAL_GOLD_RATE,
   MAX_SAFE_GAME_INTEGER,
@@ -22,6 +23,7 @@ import {
   OFFLINE_MAX_DURATION_MS,
 } from "./constants";
 import {
+  addExpToBoxer,
   addProgressToBoxer,
   calculateCombatStats,
   calculateComboAdjustedDamage,
@@ -550,8 +552,13 @@ export function calculateOfflineProgress(
   const rewardPerKill = calculateGoldReward(stage.goldReward, stats.goldBonus);
   const gold = Math.min(MAX_SAFE_GAME_INTEGER, kills * rewardPerKill);
 
+  // 오프라인 정산도 온라인 처치와 동일하게 경험치를 부여한다(동작 일관성).
+  //   오프라인 위치는 항상 일반 스테이지로 강제되므로 보스 클리어 보너스는 없고 EXP_PER_KILL만 적용.
+  const exp = Math.min(MAX_SAFE_GAME_INTEGER, kills * EXP_PER_KILL);
+  const progressed = addExpToBoxer(addProgressToBoxer(boxer, kills, gold), exp);
+
   return {
-    boxer: addProgressToBoxer(boxer, kills, gold),
+    boxer: progressed,
     position: offlinePosition,
     elapsedMs: clampedElapsedMs,
     kills,

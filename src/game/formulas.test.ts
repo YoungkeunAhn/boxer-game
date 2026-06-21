@@ -3,11 +3,17 @@ import {
   DODGE_RATE_CAP,
   FULL_COMBO_UPPER_DAMAGE_MULT,
   INFIGHTER_GUARD_COUNTER_RATE,
+  LEVEL_UP_DIAMOND_REWARD,
+  MAX_SAFE_GAME_INTEGER,
   ONE_TWO_HOOK_CRIT_BONUS,
   ONE_TWO_STRAIGHT_DAMAGE_MULT,
+  PLAYER_EXP_BASE,
+  PLAYER_EXP_GROWTH,
 } from "./constants";
 import type { Boxer, CombatStats, UpgradeLevels } from "./types";
 import {
+  addDiamondToBoxer,
+  addExpToBoxer,
   attackAnimationKey,
   calculateAttackDamage,
   calculateAttackDps,
@@ -24,6 +30,7 @@ import {
   calculateIncomingDamage,
   calculateMonsterAttackPower,
   calculateUpgradeCost,
+  expToNext,
   isUpgradeAtMaxLevel,
   purchaseUpgrade,
 } from "./formulas";
@@ -48,6 +55,9 @@ const boxer: Boxer = {
   gold: 100,
   totalKills: 0,
   upgradeLevels: zeroLevels,
+  diamond: 0,
+  playerLevel: 1,
+  playerExp: 0,
 };
 
 describe("자동 전투 수식", () => {
@@ -309,5 +319,73 @@ describe("자동 전투 수식", () => {
     expect(result.purchased).toBe(false);
     expect(result.boxer).toBe(boundary);
     expect(result.boxer.upgradeLevels.attackPower).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+describe("TASK-019 플레이어 경험치·재화 파생", () => {
+  it("expToNext(level) = floor(BASE × GROWTH^level)이고 단조 증가한다", () => {
+    expect(expToNext(0)).toBe(Math.floor(PLAYER_EXP_BASE));
+    expect(expToNext(1)).toBe(Math.floor(PLAYER_EXP_BASE * PLAYER_EXP_GROWTH));
+    expect(expToNext(5)).toBe(Math.floor(PLAYER_EXP_BASE * PLAYER_EXP_GROWTH ** 5));
+    // 단조 증가(GROWTH>1).
+    let prev = -1;
+    for (let level = 0; level <= 20; level += 1) {
+      const value = expToNext(level);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
+    }
+  });
+
+  it("큰 level에서 expToNext가 MAX_SAFE_GAME_INTEGER로 클램프된다", () => {
+    expect(expToNext(10_000)).toBe(MAX_SAFE_GAME_INTEGER);
+    expect(expToNext(10_000)).toBeLessThanOrEqual(MAX_SAFE_GAME_INTEGER);
+  });
+
+  it("음수·비유한 level은 거부한다", () => {
+    expect(() => expToNext(-1)).toThrow(RangeError);
+    expect(() => expToNext(1.5)).toThrow(RangeError);
+    expect(() => expToNext(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+
+  it("addDiamondToBoxer가 다이아를 가산하고 음수는 거부, 상한 클램프된다", () => {
+    expect(addDiamondToBoxer(boxer, 100).diamond).toBe(100);
+    expect(addDiamondToBoxer({ ...boxer, diamond: 5 }, 7).diamond).toBe(12);
+    expect(() => addDiamondToBoxer(boxer, -1)).toThrow(RangeError);
+    expect(() => addDiamondToBoxer(boxer, Number.NaN)).toThrow(RangeError);
+    expect(addDiamondToBoxer({ ...boxer, diamond: MAX_SAFE_GAME_INTEGER }, 10).diamond).toBe(
+      MAX_SAFE_GAME_INTEGER,
+    );
+  });
+
+  it("임계 미만이면 레벨업 없이 경험치만 누적한다", () => {
+    const result = addExpToBoxer(boxer, 10);
+    expect(result.playerLevel).toBe(1);
+    expect(result.playerExp).toBe(10);
+    expect(result.diamond).toBe(0);
+  });
+
+  it("임계 초과 시 레벨업하고 잉여 경험치를 이월하며 다이아 보상을 가산한다", () => {
+    const threshold = expToNext(1); // Lv1 → Lv2 임계.
+    const result = addExpToBoxer(boxer, threshold + 3);
+    expect(result.playerLevel).toBe(2);
+    expect(result.playerExp).toBe(3);
+    expect(result.diamond).toBe(LEVEL_UP_DIAMOND_REWARD);
+  });
+
+  it("한 번에 여러 레벨업을 처리한다(다중 레벨업·다이아 누적)", () => {
+    // Lv1~Lv3 임계 합을 한 번에 부여 → 2회 레벨업(Lv1→2→3).
+    const total = expToNext(1) + expToNext(2) + 4;
+    const result = addExpToBoxer(boxer, total);
+    expect(result.playerLevel).toBe(3);
+    expect(result.playerExp).toBe(4);
+    expect(result.diamond).toBe(LEVEL_UP_DIAMOND_REWARD * 2);
+  });
+
+  it("음수·비유한 경험치는 거부하고 0은 무변화다", () => {
+    expect(() => addExpToBoxer(boxer, -1)).toThrow(RangeError);
+    expect(() => addExpToBoxer(boxer, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    const same = addExpToBoxer({ ...boxer, playerExp: 7 }, 0);
+    expect(same.playerExp).toBe(7);
+    expect(same.playerLevel).toBe(1);
   });
 });

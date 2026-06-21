@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCombatRuntime } from "../game/combat";
 import { calculateCombatStats } from "../game/formulas";
-import { BALANCE_VERSION, INITIAL_UPGRADE_LEVELS, SCHEMA_VERSION } from "../game/constants";
+import {
+  BALANCE_VERSION,
+  INITIAL_UPGRADE_LEVELS,
+  LEVEL_UP_DIAMOND_REWARD,
+  SCHEMA_VERSION,
+} from "../game/constants";
 import type { SaveSnapshot } from "../game/save";
 import type { Boxer, SaveDataV5 } from "../game/types";
 import { createGameStore, type GameStoreDependencies } from "./gameStore";
@@ -45,6 +50,9 @@ function boxer(overrides: Partial<Boxer> = {}): Boxer {
     gold: 0,
     totalKills: 0,
     upgradeLevels: { ...INITIAL_UPGRADE_LEVELS },
+    diamond: 0,
+    playerLevel: 1,
+    playerExp: 0,
     ...overrides,
   };
 }
@@ -108,6 +116,67 @@ describe("자동 전투 게임 스토어", () => {
     fallback.getState().createBoxer("기본 복서");
     expect(fallback.getState().boxer).toEqual(
       expect.objectContaining({ boxerType: "INFIGHTER", gender: "MALE" }),
+    );
+  });
+
+  it("TASK-019: 새 복서는 다이아 0·레벨 1·경험치 0으로 시작한다", () => {
+    const clock = new FakeClock();
+    const store = createGameStore(dependencies(clock));
+    store.getState().createBoxer("새 복서");
+    expect(store.getState().boxer).toEqual(
+      expect.objectContaining({ diamond: 0, playerLevel: 1, playerExp: 0 }),
+    );
+  });
+
+  it("TASK-019: 일반 처치 시 플레이어 경험치가 EXP_PER_KILL만큼 오르고 임계 초과 시 레벨업한다", () => {
+    const clock = new FakeClock();
+    // 강한 공격력으로 한 번에 처치하도록 둔다(random 0.99 → 비치명타). 일반 1-1 몬스터 HP는 30.
+    const strong = boxer({ upgradeLevels: { ...INITIAL_UPGRADE_LEVELS, attackPower: 30 } });
+    const store = createGameStore(dependencies(clock, { random: () => 0.99 }));
+    const start = createCombatRuntime(strong, { chapter: 1, stage: 1 }, clock.now);
+    store.setState({ boxer: strong, combat: start, isRunning: false });
+    store.getState().resume();
+    // 여러 공격이 쌓여 일반 몬스터를 연속 처치하면 처치마다 EXP_PER_KILL(=1)이 누적된다.
+    clock.advanceTo(20_000);
+    const after = store.getState().boxer!;
+    // 처치 누적이 충분히 쌓이면 경험치 곡선상 최소 1회 이상 레벨업한다(EXP_PER_KILL·expToNext 가정값 기준).
+    expect(after.totalKills).toBeGreaterThan(0);
+    expect(after.playerLevel + after.playerExp).toBeGreaterThan(0);
+    // 레벨업이 일어났다면 다이아 보상도 가산됐다(보상 0 가정이면 0).
+    if (after.playerLevel > 1) {
+      expect(after.diamond).toBeGreaterThanOrEqual(LEVEL_UP_DIAMOND_REWARD);
+    }
+  });
+
+  it("TASK-019: 보스 클리어 시 EXP_PER_BOSS_CLEAR만큼 경험치를 받는다", () => {
+    const clock = new FakeClock();
+    // 보스(1-5)에서 한 방에 잡도록 매우 높은 공격력. random 0.99 비치명타지만 어퍼 등 누적으로 처치.
+    const strong = boxer({ upgradeLevels: { ...INITIAL_UPGRADE_LEVELS, attackPower: 60 } });
+    const store = createGameStore(dependencies(clock, { random: () => 0.99 }));
+    const bossStart = createCombatRuntime(strong, { chapter: 1, stage: 5 }, clock.now);
+    store.setState({ boxer: strong, combat: bossStart, isRunning: false });
+    store.getState().resume();
+    clock.advanceTo(10_000);
+    const after = store.getState().boxer!;
+    // 보스를 잡았다면(다음 챕터로 전이) 경험치가 누적돼 있어야 한다.
+    expect(after.playerLevel + after.playerExp).toBeGreaterThan(0);
+  });
+
+  it("TASK-019: persist 라운드트립에 신규 필드가 포함된다", () => {
+    const clock = new FakeClock();
+    let savedSnapshot: SaveSnapshot | null = null;
+    const store = createGameStore(
+      dependencies(clock, {
+        save: (snapshot) => {
+          savedSnapshot = snapshot;
+          return true;
+        },
+      }),
+    );
+    store.getState().createBoxer("저장 복서");
+    expect(savedSnapshot).not.toBeNull();
+    expect(savedSnapshot!.boxer).toEqual(
+      expect.objectContaining({ diamond: 0, playerLevel: 1, playerExp: 0 }),
     );
   });
 

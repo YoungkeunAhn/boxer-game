@@ -4,8 +4,11 @@ import {
   ATTACK_TYPES,
   BOXER_TYPE_MODIFIERS,
   FULL_COMBO_UPPER_DAMAGE_MULT,
+  LEVEL_UP_DIAMOND_REWARD,
   ONE_TWO_HOOK_CRIT_BONUS,
   ONE_TWO_STRAIGHT_DAMAGE_MULT,
+  PLAYER_EXP_BASE,
+  PLAYER_EXP_GROWTH,
   COUNTER_BASE_DAMAGE_RATE,
   COUNTER_PER_LEVEL,
   COUNTER_RATE_CAP,
@@ -359,4 +362,46 @@ export function addProgressToBoxer(
     totalKills: safeAdd(boxer.totalKills, kills),
     gold: safeAdd(boxer.gold, gold),
   };
+}
+
+// TASK-019(P3): 플레이어 경험치 곡선(가정값). expToNext(level) = floor(BASE × GROWTH^level), 세이프정수 클램프.
+//   기존 강화 비용 곡선(1.25^level)과 톤을 맞춘다. level은 0 이상의 안전한 정수.
+export function expToNext(level: number): number {
+  assertLevel(level);
+  return toSafeInteger(PLAYER_EXP_BASE * PLAYER_EXP_GROWTH ** level);
+}
+
+// TASK-019(P3): 다이아 가산(획득). 음수 거부, 새 Boxer 반환, MAX_SAFE_GAME_INTEGER 클램프.
+export function addDiamondToBoxer(boxer: Boxer, amount: number): Boxer {
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new RangeError("다이아 획득량은 0 이상의 유한한 수여야 합니다.");
+  }
+  return {
+    ...boxer,
+    diamond: safeAdd(boxer.diamond, Math.floor(amount)),
+  };
+}
+
+// TASK-019(P3): 경험치 가산 후 레벨업 정산(순수). 임계(expToNext) 초과 시 다중 레벨업을 루프로 처리하고
+//   잉여 경험치는 다음 레벨로 이월, 레벨업 1회당 LEVEL_UP_DIAMOND_REWARD 다이아를 가산한다.
+//   새 Boxer 반환·변이 없음·MAX_SAFE_GAME_INTEGER 클램프. 음수 경험치는 거부한다.
+//   가정/TODO: 획득원·곡선·레벨업 보상은 전부 임시값(constants.ts)이며 밸런스 확정 시 갱신.
+export function addExpToBoxer(boxer: Boxer, exp: number): Boxer {
+  if (!Number.isFinite(exp) || exp < 0) {
+    throw new RangeError("경험치 획득량은 0 이상의 유한한 수여야 합니다.");
+  }
+  let playerLevel = boxer.playerLevel;
+  let playerExp = safeAdd(boxer.playerExp, Math.floor(exp));
+  let diamond = boxer.diamond;
+
+  // 레벨업 루프. 임계가 0이면(이론상) 무한 루프를 막기 위해 threshold>0 조건을 둔다.
+  while (playerLevel < MAX_SAFE_GAME_INTEGER) {
+    const threshold = expToNext(playerLevel);
+    if (threshold <= 0 || playerExp < threshold) break;
+    playerExp -= threshold;
+    playerLevel += 1;
+    diamond = safeAdd(diamond, LEVEL_UP_DIAMOND_REWARD);
+  }
+
+  return { ...boxer, playerLevel, playerExp, diamond };
 }

@@ -15,18 +15,26 @@ import {
   DEFAULT_BOXER_TYPE,
   DEFAULT_GENDER,
   DEFAULT_SPEED_MULTIPLIER,
+  EXP_PER_BOSS_CLEAR,
+  EXP_PER_KILL,
   FINISHER_DAMAGE_MULT,
+  INITIAL_DIAMOND,
+  INITIAL_PLAYER_EXP,
+  INITIAL_PLAYER_LEVEL,
   INITIAL_UPGRADE_LEVELS,
   MAX_SAFE_GAME_INTEGER,
   TYPE_SWITCH_COOLDOWN_MS,
 } from "../game/constants";
 import {
+  addExpToBoxer,
   addProgressToBoxer,
   calculateCombatStats,
   calculateComboAdjustedDamage,
   calculateGoldReward,
+  expToNext,
   purchaseUpgrade,
 } from "../game/formulas";
+import { dailyResetRemainingMs } from "../game/progress";
 import { getNextStagePosition } from "../data/stages";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
 import type {
@@ -164,6 +172,10 @@ function createDefaultBoxer(
     gold: 0,
     totalKills: 0,
     upgradeLevels: { ...INITIAL_UPGRADE_LEVELS },
+    // TASK-019(P3): 신규 재화·플레이어 진행 초기값.
+    diamond: INITIAL_DIAMOND,
+    playerLevel: INITIAL_PLAYER_LEVEL,
+    playerExp: INITIAL_PLAYER_EXP,
   };
 }
 
@@ -262,7 +274,13 @@ export function createGameStore(
         if (step.attack) {
           lastAttack = step.attack;
           killed ||= step.attack.killed;
-          bossDefeated ||= attackedStageWasBoss && step.attack.killed;
+          const stageBossDefeated = attackedStageWasBoss && step.attack.killed;
+          bossDefeated ||= stageBossDefeated;
+          // TASK-019(P3): 처치 시 플레이어 경험치 가산(보스 클리어는 보스 보상, 일반 처치는 킬 보상).
+          //   레벨업 정산·다이아 보상은 addExpToBoxer 내부에서 순수 처리된다(가정값 — constants.ts).
+          if (step.attack.killed) {
+            boxer = addExpToBoxer(boxer, stageBossDefeated ? EXP_PER_BOSS_CLEAR : EXP_PER_KILL);
+          }
           // v1.3b: 발동한 콤비네이션이 있으면 직전 발동 콤보로 갱신(연출용). null이면 직전 값 유지.
           if (step.attack.combo) lastCombo = step.attack.combo;
         }
@@ -530,10 +548,16 @@ export function createGameStore(
         const damage = Math.min(MAX_SAFE_GAME_INTEGER, Math.floor(base.damage * FINISHER_DAMAGE_MULT));
         const killed = damage >= combat.monsterHp;
         const goldReward = killed ? calculateGoldReward(stage.goldReward, stats.goldBonus) : 0;
-        const nextBoxer = killed ? addProgressToBoxer(boxer, 1, goldReward) : boxer;
+        const bossDefeated = killed && stage.isBoss;
+        // TASK-019(P3): 수동 피니시 처치도 경험치 가산(보스 클리어는 보스 보상, 일반은 킬 보상).
+        const nextBoxer = killed
+          ? addExpToBoxer(
+              addProgressToBoxer(boxer, 1, goldReward),
+              bossDefeated ? EXP_PER_BOSS_CLEAR : EXP_PER_KILL,
+            )
+          : boxer;
 
         let nextCombat: CombatRuntime;
-        const bossDefeated = killed && stage.isBoss;
         if (!killed) {
           // 피니시 발동만으로 게이지를 소비한다(처치 못 해도 소비). 진행은 동일 스테이지 유지.
           nextCombat = { ...combat, monsterHp: Math.max(0, combat.monsterHp - damage), comboGauge: 0 };
@@ -587,7 +611,8 @@ export function createGameStore(
           set({ message: "아직 타입을 바꿀 수 없습니다. 잠시 후 다시 시도하세요." });
           return;
         }
-        // TODO(TASK-019): TYPE_SWITCH_COST 다이아 차감 — P3 재화 도입 후 연결.
+        // TODO: TYPE_SWITCH_COST 다이아 차감(sink) — boxer.diamond는 TASK-019에서 도입됐으나
+        //   현재 TYPE_SWITCH_COST=0(무료)이라 차감 미연결. 상점/타입전환 비용 확정 시 addDiamondToBoxer 역연산으로 연결한다.
         const switched = switchFighterType(boxer, combat, boxerType, gender, now);
         lastTypeSwitchAt = now;
         set({
@@ -607,3 +632,23 @@ export function createGameStore(
 }
 
 export const useGameStore = createGameStore();
+
+// TASK-019(P3): 헤더(TASK-020) 토대용 순수 셀렉터. GameState에 파생 필드를 노출하지 않고(이번 범위는 저장 토대),
+//   화면이 boxer + 주입 now로부터 직접 파생하도록 작은 셀렉터만 export한다.
+//   - selectExpToNext: 현재 플레이어 레벨의 다음 레벨까지 필요한 경험치(저장 안 함, 순수 파생).
+//   - selectExpProgress: 경험치 진행률(0~1). 경험치 바 표시용.
+//   - selectDailyResetRemainingMs: 다음 일일 리셋까지 남은 ms(주입 now 기준 순수). ⏱ 타이머용.
+export function selectExpToNext(boxer: Boxer | null): number {
+  return boxer ? expToNext(boxer.playerLevel) : 0;
+}
+
+export function selectExpProgress(boxer: Boxer | null): number {
+  if (!boxer) return 0;
+  const threshold = expToNext(boxer.playerLevel);
+  if (threshold <= 0) return 0;
+  return Math.min(1, Math.max(0, boxer.playerExp / threshold));
+}
+
+export function selectDailyResetRemainingMs(now: number): number {
+  return dailyResetRemainingMs(now);
+}

@@ -47,8 +47,8 @@ describe("게임 기준 상수", () => {
       dodge: 0,
       counter: 0,
     });
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(BALANCE_VERSION).toBe(6);
+    expect(SCHEMA_VERSION).toBe(6);
+    expect(BALANCE_VERSION).toBe(7);
     expect(STAGES_BALANCE_VERSION).toBe(BALANCE_VERSION);
   });
 
@@ -128,8 +128,8 @@ describe("게임 기준 상수", () => {
 
   it("TASK-015 전투 컨트롤 기본값과 배속 단계를 고정하고, 저장/밸런스 버전은 불변이다", () => {
     // 컨트롤은 휘발 UI 상태(저장 안 함), 보스 타임아웃은 게임 시간 기준 → 두 버전 모두 불변.
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(BALANCE_VERSION).toBe(6);
+    expect(SCHEMA_VERSION).toBe(6);
+    expect(BALANCE_VERSION).toBe(7);
     // 가정값: 배속 x1/x2, 기본 AUTO·x1.
     expect(SPEED_MULTIPLIERS).toEqual([1, 2]);
     expect(DEFAULT_SPEED_MULTIPLIER).toBe(1);
@@ -154,7 +154,7 @@ describe("게임 기준 상수", () => {
     expect(TYPE_SWITCH_COST).toBe(0);
     expect(TYPE_SWITCH_COOLDOWN_MS).toBe(0);
     expect(TYPE_SWITCH_COOLDOWN_MS).toBeGreaterThanOrEqual(0);
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(BALANCE_VERSION).toBe(6);
+    expect(SCHEMA_VERSION).toBe(6);
+    expect(BALANCE_VERSION).toBe(7);
   });
 });
