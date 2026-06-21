@@ -197,7 +197,8 @@ export function skillButton(page: Page) {
 }
 
 export function hpBar(page: Page) {
-  return page.getByRole("progressbar");
+  // TASK-020(P3): 상단 바 경험치 바도 progressbar라 이름(…체력)으로 몬스터 HP 바를 한정한다.
+  return page.getByRole("progressbar", { name: /체력$/ });
 }
 
 export async function hpNow(page: Page): Promise<number> {
@@ -214,6 +215,45 @@ export function statValue(page: Page, key: UpgradeKey | "totalKills") {
 
 export function upgradeButton(page: Page, key: UpgradeKey) {
   return page.getByTestId(`upgrade-button-${key}`);
+}
+
+// TASK-020(P3): 상단 바·하단 5탭 testid 헬퍼. 탭은 휘발 UI 상태라 SAVE_KEY/SCHEMA/BALANCE 불변(v6/6/7).
+export type TabId = "shop" | "bag" | "fighter" | "quest" | "arena";
+
+export function topBar(page: Page) {
+  return page.getByTestId("top-bar");
+}
+
+export function playerLevel(page: Page) {
+  return page.getByTestId("player-level");
+}
+
+export function playerExpBar(page: Page) {
+  return page.getByTestId("player-exp-bar");
+}
+
+export function currencyGold(page: Page) {
+  return page.getByTestId("currency-gold");
+}
+
+export function currencyDiamond(page: Page) {
+  return page.getByTestId("currency-diamond");
+}
+
+export function dailyResetTimer(page: Page) {
+  return page.getByTestId("daily-reset-timer");
+}
+
+export function tabBar(page: Page) {
+  return page.getByTestId("tab-bar");
+}
+
+export function tab(page: Page, id: TabId) {
+  return page.getByTestId(`tab-${id}`);
+}
+
+export function tabBadge(page: Page, id: TabId) {
+  return page.getByTestId(`tab-badge-${id}`);
 }
 
 // pagehide -> pause(), visibilitychange(visible) -> resume() 를 직접 발생시킨다.

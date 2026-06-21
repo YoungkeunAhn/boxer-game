@@ -1,0 +1,123 @@
+.topBar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #262c39;
+  border-radius: 14px;
+  background: rgba(18, 23, 33, 0.92);
+}
+
+.profile {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, #f6bb43, #d2751c);
+  color: #1a1205;
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name {
+  overflow: hidden;
+  color: #f5f6f8;
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.levelRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.level {
+  flex: 0 0 auto;
+  color: #f6bb43;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.expTrack {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 80px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #2a3140;
+}
+
+.expFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff5a45, #e0322a);
+  transition: width 0.25s ease;
+}
+
+.wallet {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.currency {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid #2c3343;
+  border-radius: 10px;
+  background: rgba(30, 36, 48, 0.9);
+  color: #e6e9f0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .topBar {
+    padding: 9px 11px;
+    gap: 10px;
+  }
+
+  .wallet {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .currency {
+    padding: 5px 8px;
+    font-size: 0.75rem;
+  }
+}

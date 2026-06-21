@@ -1,8 +1,12 @@
 .page {
+  display: flex;
   width: min(100% - 32px, 960px);
   min-width: 0;
+  flex-direction: column;
+  gap: 18px;
   margin: 0 auto;
-  padding: 42px 0 64px;
+  /* TASK-020(P3): 하단 고정 탭 바가 콘텐츠를 가리지 않도록 하단 패딩 확보(safe-area 포함). */
+  padding: 20px 0 calc(84px + env(safe-area-inset-bottom));
 }
 
 .hero {
@@ -11,7 +15,25 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 26px;
+}
+
+.placeholder {
+  display: grid;
+  min-height: 50vh;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #9fa7b8;
+}
+
+.placeholderTitle {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 900;
+}
+
+.placeholderText {
+  margin: 0;
 }
 
 .kicker {
@@ -119,7 +141,8 @@
 @media (max-width: 420px) {
   .page {
     width: calc(100% - 16px);
-    padding: 20px 0 40px;
+    /* 하단은 탭 바 클리어런스 유지(.page 기본값과 동일). */
+    padding: 14px 0 calc(84px + env(safe-area-inset-bottom));
   }
 
   .hero {

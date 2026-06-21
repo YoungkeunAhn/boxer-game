@@ -1,13 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BoxerFigure } from "../components/BoxerFigure";
 import { CombatControls } from "../components/CombatControls";
 import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
+import { TabBar, type TabId } from "../components/TabBar";
+import { TopBar } from "../components/TopBar";
 import { TypeSwitchPanel } from "../components/TypeSwitchPanel";
 import { UpgradePanel } from "../components/UpgradePanel";
-import { useGameStore } from "../stores/gameStore";
+import {
+  selectQuestBadge,
+  selectShopBadge,
+  useGameStore,
+} from "../stores/gameStore";
 import styles from "./HomePage.module.css";
 
 export function HomePage() {
@@ -18,6 +24,13 @@ export function HomePage() {
   const pause = useGameStore((state) => state.pause);
   const resume = useGameStore((state) => state.resume);
   const reset = useGameStore((state) => state.reset);
+
+  // TASK-020(P3): 휘발 탭 상태(라우터 미도입 — 가정). 기본=파이터(중앙 홈). 새로고침 시 파이터로 리셋(저장 안 함).
+  const [activeTab, setActiveTab] = useState<TabId>("fighter");
+
+  // 하단 탭 알림 뱃지. 현재 backing state 부재로 항상 false(상점=TASK-023·퀘스트=TASK-021에서 연결).
+  const shopBadge = useGameStore(selectShopBadge);
+  const questBadge = useGameStore(selectQuestBadge);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -46,26 +59,8 @@ export function HomePage() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.hero}>
-        <div>
-          <p className={styles.kicker}>ROAD TO CHAMPION</p>
-          <h1 className={styles.title}>복서키우기</h1>
-          <p className={styles.subtitle}>
-            자동 전투로 골드를 모아 강화하고, 더 깊은 챕터로 전진하세요.
-          </p>
-        </div>
-        <button
-          className={styles.reset}
-          type="button"
-          onClick={() => {
-            if (window.confirm("저장된 진행도를 지우고 처음부터 시작할까요?")) {
-              reset();
-            }
-          }}
-        >
-          처음부터
-        </button>
-      </header>
+      {/* TASK-020(P3): 모든 화면 공통 상단 바(프로필·레벨·경험치·재화·일일 타이머). */}
+      <TopBar boxer={boxer} />
 
       {storageWarning && (
         <p className={styles.warning} role="alert">
@@ -86,22 +81,63 @@ export function HomePage() {
         </p>
       )}
 
-      <div className={styles.grid}>
-        <div className={styles.status}>
-          <BoxerStatus boxer={boxer} />
-        </div>
-        {/* TASK-014: 표시 전용 전투 헤더. 헤더와 BoxerStatus/CombatPanel은 일부 정보가 중복되나,
-            중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
-        <CombatHeader />
-        {/* TASK-018: 타입별 6포즈 애니메이션(표시 전용). boxer/combat null이면 내부에서 null 가드. */}
-        <BoxerFigure />
-        <CombatPanel />
-        {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
-        <CombatControls />
-        {/* TASK-017: 파이터 타입 외형 전환 패널(4종 카드). boxer/combat null이면 내부에서 null 가드. */}
-        <TypeSwitchPanel />
-        <UpgradePanel boxer={boxer} />
-      </div>
+      {/* 파이터 탭(홈): 기존 전투 화면 전체. 상단 바와 정보 중복을 줄이려 hero(타이틀·'처음부터')는 파이터 탭 내부로 옮겼다(표현만, 로직 불변). */}
+      {activeTab === "fighter" && (
+        <>
+          <header className={styles.hero}>
+            <div>
+              <p className={styles.kicker}>ROAD TO CHAMPION</p>
+              <h1 className={styles.title}>복서키우기</h1>
+              <p className={styles.subtitle}>
+                자동 전투로 골드를 모아 강화하고, 더 깊은 챕터로 전진하세요.
+              </p>
+            </div>
+            <button
+              className={styles.reset}
+              type="button"
+              onClick={() => {
+                if (window.confirm("저장된 진행도를 지우고 처음부터 시작할까요?")) {
+                  reset();
+                }
+              }}
+            >
+              처음부터
+            </button>
+          </header>
+
+          <div className={styles.grid}>
+            <div className={styles.status}>
+              <BoxerStatus boxer={boxer} />
+            </div>
+            {/* TASK-014: 표시 전용 전투 헤더. 헤더와 BoxerStatus/CombatPanel은 일부 정보가 중복되나,
+                중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
+            <CombatHeader />
+            {/* TASK-018: 타입별 6포즈 애니메이션(표시 전용). boxer/combat null이면 내부에서 null 가드. */}
+            <BoxerFigure />
+            <CombatPanel />
+            {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
+            <CombatControls />
+            {/* TASK-017: 파이터 타입 외형 전환 패널(4종 카드). boxer/combat null이면 내부에서 null 가드. */}
+            <TypeSwitchPanel />
+            <UpgradePanel boxer={boxer} />
+          </div>
+        </>
+      )}
+
+      {/* 퀘스트 탭: TASK-021에서 실제 화면으로 교체. 현재는 플레이스홀더. */}
+      {activeTab === "quest" && (
+        <section className={styles.placeholder} data-testid="quest-placeholder">
+          <h2 className={styles.placeholderTitle}>퀘스트</h2>
+          <p className={styles.placeholderText}>준비 중입니다.</p>
+        </section>
+      )}
+
+      {/* TASK-020(P3): 하단 5탭 네비. 보류 탭(상점·가방·경기장)은 잠금·진입 차단(자리 유지). */}
+      <TabBar
+        activeTab={activeTab}
+        onSelect={setActiveTab}
+        badges={{ shop: shopBadge, quest: questBadge }}
+      />
     </main>
   );
 }
