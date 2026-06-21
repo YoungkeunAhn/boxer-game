@@ -26,7 +26,7 @@ Groggy Bar
 
 ### 구현 확정값 (TASK-009, `src/game/constants.ts`)
 
-아래 값은 TASK-013에서 확정·동결했다(확정값 balanceVersion 9). 코드(`constants.ts`)·테스트와 같은 값을 유지한다. 그로기는 보스 전투 런타임 전용 값이라 저장하지 않는다(`CombatRuntime`의 `groggyGauge`/`groggyMax`/`groggyUntil`, 비저장 → `SCHEMA_VERSION` 영향 없음).
+아래 값은 TASK-013에서 확정·동결했다(확정값 balanceVersion 10). 코드(`constants.ts`)·테스트와 같은 값을 유지한다. 그로기는 보스 전투 런타임 전용 값이라 저장하지 않는다(`CombatRuntime`의 `groggyGauge`/`groggyMax`/`groggyUntil`, 비저장 → `SCHEMA_VERSION` 영향 없음).
 
 - 누적 소스: **훅 +15**, **어퍼 +25** (`GROGGY_GAIN_BY_ATTACK`). 잽·스트레이트는 0. 풀 콤비네이션 마무리 어퍼는 추가로 **+20**(`FULL_COMBO_GROGGY_BONUS`).
 - 게이지 상한: **100** (`GROGGY_MAX_BASE`). 도달 시 그로기 진입·게이지 0 리셋.

@@ -19,7 +19,7 @@
 14. 복서 HP·몬스터 공격·회피/가드/카운터를 도입한다(완료). → [몬스터 공격](../combat/monster-attacks.md)
 15. 기본 공격 쿨타임·콤비네이션·전용 스킬 슬롯을 도입한다(완료). → [스킬 장착 구조](../skills/equip.md)
 16. 게임 화면형 UI·타입별 톤·애니메이션을 적용한다(완료). → [UI 구조](../presentation/ui.md)
-17. 버전·문서·테스트·저장 스키마를 확정·정합화한다(TASK-013, `schemaVersion: 6`·`balanceVersion: 9` 동결).
+17. 버전·문서·테스트·저장 스키마를 확정·정합화한다(TASK-013, `schemaVersion: 6`·`balanceVersion: 10` 동결).
 
 ## 관련 문서
 

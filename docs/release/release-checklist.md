@@ -26,7 +26,7 @@
 
 ## 저장 및 오프라인 보상
 
-- [ ] `boxer-game.save.v6`, `schemaVersion: 6`, `balanceVersion: 9`을 사용한다.
+- [ ] `boxer-game.save.v6`, `schemaVersion: 6`, `balanceVersion: 10`을 사용한다.
 - [ ] 새로고침 후 복서, 골드, 처치 수, 강화 레벨과 진행 위치가 유지된다.
 - [ ] 몬스터 HP와 타이머는 저장되지 않고 안전한 새 전투로 복원된다.
 - [ ] 일반 저장은 최대 초당 한 번, 강화·보스 결과·백그라운드·종료는 즉시 반영된다.

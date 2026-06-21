@@ -7,7 +7,7 @@
 ```ts
 type SaveDataV6 = {
   schemaVersion: 6;
-  balanceVersion: 9;
+  balanceVersion: 10;
   savedAt: string;
   boxer: Boxer; // boxerType·gender·upgradeLevels(9키)·equippedSkills 포함
   position: StagePosition;
@@ -24,7 +24,7 @@ type SaveDataV6 = {
 
 ## 저장 및 검증 규칙
 
-- `schemaVersion === 6`, `balanceVersion === 9`을 확인한다(둘 중 하나라도 어긋나면 `invalid`).
+- `schemaVersion === 6`, `balanceVersion === 10`을 확인한다(둘 중 하나라도 어긋나면 `invalid`).
 - 복서 이름은 기존 UI의 길이·공백 검증을 적용한다(1~16자).
 - `boxerType`은 `INFIGHTER`/`OUT_BOXER`, `gender`는 `MALE`/`FEMALE` 중 하나여야 한다.
 - 골드, 총 처치 수와 강화 레벨(9키: 공격력·공격속도·치명타율·치명타 피해·골드 보너스·체력·방어·회피·카운터)은 음수가 아닌 유한한 안전한 정수여야 하며 각 강화의 레벨 상한을 넘지 않아야 한다.

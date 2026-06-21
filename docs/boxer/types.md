@@ -7,7 +7,7 @@
 아웃복서  = 회피/카운터형 복서
 ```
 
-타입과 스킬은 `수정내용2`로 구현 완료됐고 밸런스 수치는 TASK-013에서 확정·동결했다(balanceVersion 9). 수치를 바꾸면 [능력치와 수식](../systems/stats-and-formulas.md)과 밸런스 버전을 함께 갱신한다.
+타입과 스킬은 `수정내용2`로 구현 완료됐고 밸런스 수치는 TASK-013에서 확정·동결했다(balanceVersion 10). 수치를 바꾸면 [능력치와 수식](../systems/stats-and-formulas.md)과 밸런스 버전을 함께 갱신한다.
 
 ## 타입 선택
 

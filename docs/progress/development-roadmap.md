@@ -34,7 +34,7 @@
 
 목표: 앱 생명주기와 재접속에서도 진행을 안전하게 유지한다.
 
-1. 저장·검증·복원 구현(MVP 당시 키 `boxer-game.save.v2`; `수정내용2` 마감 후 최종 키 `boxer-game.save.v6`, `schemaVersion: 6`·`balanceVersion: 9`)
+1. 저장·검증·복원 구현(MVP 당시 키 `boxer-game.save.v2`; `수정내용2` 마감 후 최종 키 `boxer-game.save.v6`, `schemaVersion: 6`·`balanceVersion: 10`)
 2. 일반 저장 제한과 중요 사건 즉시 저장 구현
 3. 최대 8시간 오프라인 반복 파밍 정산 구현
 4. 보스 중 이탈과 시스템 시각 역행 처리
@@ -56,7 +56,7 @@
 
 ## 수정내용2 확장 (구현 완료, TASK-004~013)
 
-`수정내용2`는 TASK-004~012로 구현 완료됐고 TASK-013에서 저장 스키마·밸런스 버전·문서·테스트를 `schemaVersion: 6`·`balanceVersion: 9`로 확정·동결했다.
+`수정내용2`는 TASK-004~012로 구현 완료됐고 TASK-013에서 저장 스키마·밸런스 버전·문서·테스트를 `schemaVersion: 6`·`balanceVersion: 10`로 확정·동결했다.
 
 - v1.1 복서 타입·성별: 인파이터/아웃복서 선택과 외형(완료). → [복서 타입](../boxer/types.md)
 - v1.2 전투 심화: 복서 HP·몬스터 공격·회피/가드/카운터(완료). → [몬스터 공격](../combat/monster-attacks.md), [체력과 실패](../combat/hp-and-defeat.md)

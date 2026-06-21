@@ -2,7 +2,7 @@
 
 아웃복서는 전용 스킬로 회피/거리 조절/카운터의 느낌을 강화한다. → [아웃복서](../boxer/out-boxer.md)
 
-아래 효과·수치는 `수정내용2`로 구현 완료된 확정값(balanceVersion 9)이며 `constants.ts`의 `SKILL_NUMBERS`와 1:1로 일치한다(TASK-010 도입, TASK-013 동결). 문서 명시값(+15%/+20%/+10%, 5초/6초)은 그대로 반영했다.
+아래 효과·수치는 `수정내용2`로 구현 완료된 확정값(balanceVersion 10)이며 `constants.ts`의 `SKILL_NUMBERS`와 1:1로 일치한다(TASK-010 도입, TASK-013 동결). 문서 명시값(+15%/+20%/+10%, 5초/6초)은 그대로 반영했다.
 
 ## 수치표 (constants.ts SKILL_NUMBERS와 동일)
 

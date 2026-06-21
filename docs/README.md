@@ -14,7 +14,7 @@
 
 ## 현재 구현 기준선
 
-아래 값은 `수정내용2`(TASK-004~012) 마감 시점의 확정값(`balanceVersion: 9`, `schemaVersion: 6`)이다. 값을 바꾸면 관련 문서, 테스트, `BALANCE_VERSION`(또는 저장 형태가 바뀌면 `SCHEMA_VERSION`)을 함께 갱신한다.
+아래 값은 `수정내용2`(TASK-004~012) 마감 시점의 확정값(`balanceVersion: 10`, `schemaVersion: 6`)이다. 값을 바꾸면 관련 문서, 테스트, `BALANCE_VERSION`(또는 저장 형태가 바뀌면 `SCHEMA_VERSION`)을 함께 갱신한다.
 
 | 항목 | 구현값 |
 | --- | --- |
@@ -34,7 +34,7 @@
 | 오프라인 인정 시간 | 최대 8시간, 현재 일반 스테이지만 반복 파밍 |
 | 저장 키 | `boxer-game.save.v6`(구버전 `...v1`~`...v5`는 legacy로 안내, 비삭제) |
 | 저장 스키마 | `schemaVersion: 6` |
-| 밸런스 데이터 | `balanceVersion: 9` |
+| 밸런스 데이터 | `balanceVersion: 10` |
 
 ## 작업 유형별 필수 문서
 

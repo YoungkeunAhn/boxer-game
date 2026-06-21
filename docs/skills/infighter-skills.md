@@ -2,7 +2,7 @@
 
 인파이터는 전용 스킬로 탱커형 압박 복서의 느낌을 강화한다. → [인파이터](../boxer/infighter.md)
 
-아래 효과·수치는 `수정내용2`로 구현 완료된 확정값(balanceVersion 9)이며 `constants.ts`의 `SKILL_NUMBERS`와 1:1로 일치한다(TASK-010 도입, TASK-013 동결).
+아래 효과·수치는 `수정내용2`로 구현 완료된 확정값(balanceVersion 10)이며 `constants.ts`의 `SKILL_NUMBERS`와 1:1로 일치한다(TASK-010 도입, TASK-013 동결).
 
 ## 수치표 (constants.ts SKILL_NUMBERS와 동일)
 

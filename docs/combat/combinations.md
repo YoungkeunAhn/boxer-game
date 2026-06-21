@@ -4,7 +4,7 @@
 
 공격 스킬이 특정 순서로 이어지면 콤비네이션 보너스가 발동한다. 손 지정과 순서는 [공통 기본 공격](./basic-attacks.md)의 동작 규칙을 따른다.
 
-아래 보너스는 `수정내용2`로 구현 완료된 확정값(balanceVersion 9)이다.
+아래 보너스는 `수정내용2`로 구현 완료된 확정값(balanceVersion 10)이다.
 
 ## 콤비네이션 목록
 
@@ -34,7 +34,7 @@ JAB! → STRAIGHT! → LEFT HOOK! → RIGHT UPPER! → FULL COMBO!
 
 ## 구현 확정값 (TASK-008, `src/game/constants.ts`)
 
-아래 값은 TASK-013에서 확정·동결했다(확정값 balanceVersion 9). 코드(`constants.ts`)·테스트와 같은 값을 유지한다.
+아래 값은 TASK-013에서 확정·동결했다(확정값 balanceVersion 10). 코드(`constants.ts`)·테스트와 같은 값을 유지한다.
 
 - 보너스(콤보를 마무리한 그 타격에만 적용):
   - 원투(`ONE_TWO`): 마무리 **스트레이트 데미지 ×1.3** (`ONE_TWO_STRAIGHT_DAMAGE_MULT`).
