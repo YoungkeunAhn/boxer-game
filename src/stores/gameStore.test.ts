@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCombatRuntime } from "../game/combat";
+import { calculateCombatStats } from "../game/formulas";
 import { BALANCE_VERSION, INITIAL_UPGRADE_LEVELS, SCHEMA_VERSION } from "../game/constants";
 import type { SaveSnapshot } from "../game/save";
 import type { Boxer, SaveDataV5 } from "../game/types";
@@ -429,5 +430,90 @@ describe("자동 전투 게임 스토어", () => {
     store.getState().reset();
     expect(store.getState().boxer).toBeNull();
     expect(clock.timers.size).toBe(0);
+  });
+});
+
+describe("타입 전환(switchType) 액션", () => {
+  function loadedStore(
+    clock: FakeClock,
+    overrides: Partial<GameStoreDependencies> = {},
+  ) {
+    const data = savedData(clock, {
+      boxer: boxer({
+        boxerType: "INFIGHTER",
+        gender: "MALE",
+        gold: 9_999,
+        totalKills: 12,
+        upgradeLevels: { ...INITIAL_UPGRADE_LEVELS, maxHp: 8, dodge: 10, counter: 10 },
+      }),
+    });
+    return createGameStore(
+      dependencies(clock, { load: () => ({ status: "loaded", data }), ...overrides }),
+    );
+  }
+
+  it("전환 후 골드·강화 레벨을 보존하고 boxer.type/gender를 갱신한다", () => {
+    const clock = new FakeClock();
+    const store = loadedStore(clock);
+    store.getState().switchType("OUT_BOXER", "FEMALE");
+    const after = store.getState().boxer;
+    expect(after?.gold).toBe(9_999);
+    expect(after?.totalKills).toBe(12);
+    expect(after?.upgradeLevels).toEqual({
+      ...INITIAL_UPGRADE_LEVELS,
+      maxHp: 8,
+      dodge: 10,
+      counter: 10,
+    });
+    expect(after?.boxerType).toBe("OUT_BOXER");
+    expect(after?.gender).toBe("FEMALE");
+  });
+
+  it("combat.boxerMaxHp가 새 타입 maxHp와 일치하고 현재 HP를 클램프한다", () => {
+    const clock = new FakeClock();
+    const store = loadedStore(clock);
+    const beforeMaxHp = store.getState().combat?.boxerMaxHp ?? 0;
+    const expected = calculateCombatStats(
+      store.getState().boxer!.upgradeLevels,
+      "OUT_BOXER",
+    );
+    store.getState().switchType("OUT_BOXER", "MALE");
+    const combat = store.getState().combat;
+    expect(combat?.boxerMaxHp).toBe(expected.maxHp);
+    // 아웃복서는 maxHp가 더 낮으므로 풀 HP였던 현재 HP가 새 최대치로 클램프된다.
+    expect(expected.maxHp).toBeLessThan(beforeMaxHp);
+    expect(combat?.boxerHp).toBe(expected.maxHp);
+  });
+
+  it("persist를 호출해 저장 스냅샷의 boxer.boxerType이 갱신된다", () => {
+    const clock = new FakeClock();
+    const save = vi.fn<(snapshot: SaveSnapshot, now?: Date) => boolean>(() => true);
+    const store = loadedStore(clock, { save });
+    save.mockClear();
+    store.getState().switchType("OUT_BOXER", "FEMALE");
+    expect(save).toHaveBeenCalled();
+    const lastCall = save.mock.calls.at(-1)?.[0];
+    expect(lastCall?.boxer.boxerType).toBe("OUT_BOXER");
+    expect(lastCall?.boxer.gender).toBe("FEMALE");
+  });
+
+  it("같은 타입·성별로의 전환은 무동작이다", () => {
+    const clock = new FakeClock();
+    const save = vi.fn<(snapshot: SaveSnapshot, now?: Date) => boolean>(() => true);
+    const store = loadedStore(clock, { save });
+    save.mockClear();
+    store.getState().switchType("INFIGHTER", "MALE");
+    expect(save).not.toHaveBeenCalled();
+    expect(store.getState().boxer?.boxerType).toBe("INFIGHTER");
+  });
+
+  it("진행 중 전투의 현재 HP가 손상돼 있으면 전환 후에도 클램프 규칙을 따른다", () => {
+    const clock = new FakeClock();
+    const store = loadedStore(clock);
+    // 현재 HP를 새 maxHp보다 낮게 손상시켜 둔다 → 전환 후에도 그대로 유지(자동 보충 없음).
+    const combat = store.getState().combat!;
+    store.setState({ combat: { ...combat, boxerHp: 5 } });
+    store.getState().switchType("OUT_BOXER", "MALE");
+    expect(store.getState().combat?.boxerHp).toBe(5);
   });
 });

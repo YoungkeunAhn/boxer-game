@@ -8,7 +8,8 @@ type BoxerStatusProps = {
 };
 
 export function BoxerStatus({ boxer }: BoxerStatusProps) {
-  const stats = calculateCombatStats(boxer.upgradeLevels);
+  // TASK-017: 타입 전환이 표시 능력치에 반영되도록 boxerType을 전달한다(typeMultiplier 정합).
+  const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
 
   return (
     <section className={styles.panel} aria-labelledby="boxer-status-title">

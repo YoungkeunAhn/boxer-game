@@ -15,9 +15,13 @@ import {
   OFFLINE_MAX_DURATION_MS,
   SCHEMA_VERSION,
   SPEED_MULTIPLIERS,
+  TYPE_SKILLS,
+  TYPE_SWITCH_COOLDOWN_MS,
+  TYPE_SWITCH_COST,
   UPGRADE_BASE_COSTS,
   UPGRADE_MAX_LEVELS,
 } from "./constants";
+import { BOXER_TYPES } from "./constants";
 
 describe("게임 기준 상수", () => {
   it("자동 전투 초기값과 데이터 버전을 고정한다", () => {
@@ -130,5 +134,27 @@ describe("게임 기준 상수", () => {
     expect(SPEED_MULTIPLIERS).toEqual([1, 2]);
     expect(DEFAULT_SPEED_MULTIPLIER).toBe(1);
     expect(DEFAULT_AUTO_MODE).toBe("AUTO");
+  });
+
+  it("TASK-017 타입 전환: 전용 스킬 세트가 모든 타입을 커버하고 라벨이 비어있지 않다", () => {
+    for (const type of BOXER_TYPES) {
+      const set = TYPE_SKILLS[type];
+      expect(set).toBeDefined();
+      expect(set.active.length).toBeGreaterThan(0);
+      expect(set.active.every((label) => label.trim().length > 0)).toBe(true);
+      expect(set.passive.trim().length).toBeGreaterThan(0);
+    }
+    // 타입별 전용 스킬은 서로 달라야 한다(인파이터/아웃복서 세트가 동일하면 표시 의미 없음).
+    expect(TYPE_SKILLS.INFIGHTER.active).not.toEqual(TYPE_SKILLS.OUT_BOXER.active);
+    expect(TYPE_SKILLS.INFIGHTER.passive).not.toBe(TYPE_SKILLS.OUT_BOXER.passive);
+  });
+
+  it("TASK-017 타입 전환 비용·쿨다운 임시값이 정의돼 있다(가정값: 무료·무제한)", () => {
+    // 가정/TODO: P3(TASK-019) 재화 도입 전까지 무료, 쿨다운 0(무제한). 저장/밸런스 버전은 불변.
+    expect(TYPE_SWITCH_COST).toBe(0);
+    expect(TYPE_SWITCH_COOLDOWN_MS).toBe(0);
+    expect(TYPE_SWITCH_COOLDOWN_MS).toBeGreaterThanOrEqual(0);
+    expect(SCHEMA_VERSION).toBe(5);
+    expect(BALANCE_VERSION).toBe(6);
   });
 });

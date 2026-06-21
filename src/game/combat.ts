@@ -35,9 +35,11 @@ import type {
   AttackBeat,
   AttackType,
   Boxer,
+  BoxerType,
   CombatRuntime,
   CombatStepResult,
   ComboId,
+  Gender,
   Hand,
   MonsterAttackResult,
   OfflineProgress,
@@ -193,6 +195,31 @@ export function createCombatRuntime(
     boxerMaxHp: stats.maxHp,
     nextMonsterAttackAt: now + MONSTER_ATTACK_INTERVAL_MS,
     monsterAttackPrep: null,
+  };
+}
+
+// TASK-017: 단일 캐릭터의 타입/성별을 런타임 전환한다(4캐릭터 보유 아님).
+//   강화 레벨·골드·진행 위치·monsterHp·콤보/쿨타임 진행·보스 데드라인은 모두 유지하고,
+//   boxer를 새 type/gender로 교체한 뒤 calculateCombatStats의 typeMultiplier로 새 maxHp를 재계산한다.
+// 가정(HP 처리): 풀충전이 아니라 강화(upgrade)와 동일 규칙 — boxerMaxHp를 새 타입 최대치로 갱신하고
+//   현재 boxerHp를 새 최대치로 클램프한다(인파이터→아웃복서로 maxHp가 줄면 현재 HP도 줄 수 있음).
+//   maxHp가 늘어도 부족분을 자동 보충하지 않는다(가정 — 기획이 '풀충전'을 원하면 변경).
+// 가정: attackSpeed는 타입 무관이라 공격 쿨타임은 그대로 둔다(콤보 진행도 보존). 변이 금지·새 객체 반환.
+export function switchFighterType(
+  boxer: Boxer,
+  combat: CombatRuntime,
+  boxerType: BoxerType,
+  gender: Gender,
+  now: number,
+): { boxer: Boxer; combat: CombatRuntime } {
+  assertTimestamp(now, "now");
+  const nextBoxer: Boxer = { ...boxer, boxerType, gender };
+  const stats = calculateCombatStats(nextBoxer.upgradeLevels, boxerType);
+  const boxerMaxHp = stats.maxHp;
+  const boxerHp = Math.min(boxerMaxHp, combat.boxerHp);
+  return {
+    boxer: nextBoxer,
+    combat: { ...combat, boxerHp, boxerMaxHp },
   };
 }
 

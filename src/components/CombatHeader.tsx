@@ -14,7 +14,8 @@ export function CombatHeader() {
 
   const stage = getStageDefinition(combat.position);
   const monsterAttack = calculateMonsterAttackPower(combat.position);
-  const stats = calculateCombatStats(boxer.upgradeLevels);
+  // TASK-017: 타입 전환이 표시 능력치에 반영되도록 boxerType을 전달한다(typeMultiplier 정합).
+  const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
 
   const currentStage = combat.position.stage; // 1~5
   // 진행바 점: 인덱스 0~3 = 일반 stage 1~4, 인덱스 4 = 보스 stage 5.

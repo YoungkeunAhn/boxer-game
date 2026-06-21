@@ -212,6 +212,8 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 //   새 밸런스 수식 도입 → BALANCE 5→6.
 // TASK-015: 전투 컨트롤(AUTO/배속/수동) 도입 — 컨트롤은 휘발 UI 상태(저장 안 함), 보스 타임아웃은
 //   게임 시간 기준이라 배속이 진행/처치/골드/타임아웃 결과를 바꾸지 않음 → SCHEMA/BALANCE 불변.
+// TASK-017: boxer.type/gender 변경 경로(런타임 타입 전환)만 추가 — 신규 저장 필드·새 밸런스 수식 없음.
+//   기존 calculateCombatStats의 typeMultiplier(BOXER_TYPE_MODIFIERS)를 재적용할 뿐 → SCHEMA/BALANCE 불변.
 export const SCHEMA_VERSION = 5;
 export const BALANCE_VERSION = 6;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
@@ -241,6 +243,35 @@ export type BoxerTypeModifiers = {
   damageReductionMultiplier: number;
   evasionMultiplier: number;
   counterMultiplier: number;
+};
+
+// === TASK-017 파이터 타입 외형 전환 ===
+// 가정/TODO: 전환 비용·악용 방지(쿨다운). P3(TASK-019) 다이아 재화 도입 전이라 전환은 무료(0).
+//   비용 차감 로직은 자리만 두고 재화 연결은 TASK-019 이후로 미룬다(추측 가격 단정 금지).
+export const TYPE_SWITCH_COST = 0;
+// 가정: 잦은 전환 악용 방지 쿨다운(ms). 미확정 임시값 — 0(무제한)으로 두고 회귀 안전을 우선한다.
+//   쿨다운은 휘발 클로저 변수(lastTypeSwitchAt)로만 관리해 저장에 영향이 없다(SCHEMA 불변).
+export const TYPE_SWITCH_COOLDOWN_MS = 0;
+
+// 타입 전용 스킬 표시 메타데이터(infighter-skills.md/out-boxer-skills.md의 라벨).
+// 가정: 스킬 슬롯 시스템(TASK-010)이 아직 코드에 없어 실제 슬롯 교체가 아니라 표시용 세트로만 노출한다.
+//   TASK-010 도입 시 슬롯 기반 교체로 연결한다(TODO). 효과·수치는 미확정(가정, equip.md 참조).
+export type TypeSkillSet = {
+  active: readonly string[];
+  passive: string;
+};
+
+export const TYPE_SKILLS: Readonly<Record<BoxerType, TypeSkillSet>> = {
+  INFIGHTER: {
+    // 인파이터 전용(docs/기획/skills/infighter-skills.md).
+    active: ["리버샷", "압박", "가젤펀치", "뎀프시롤"],
+    passive: "철벽가드",
+  },
+  OUT_BOXER: {
+    // 아웃복서 전용(docs/기획/skills/out-boxer-skills.md).
+    active: ["고스트스텝", "나비 스텝", "팬텀 잽", "거리 조절"],
+    passive: "스텝백 카운터",
+  },
 };
 
 export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers>> = {

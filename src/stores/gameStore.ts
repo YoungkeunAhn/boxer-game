@@ -7,6 +7,7 @@ import {
   resolveBossTimeout,
   retryBoss as createBossRetry,
   stepCombat,
+  switchFighterType,
 } from "../game/combat";
 import {
   COMBO_GAUGE_MAX,
@@ -17,6 +18,7 @@ import {
   FINISHER_DAMAGE_MULT,
   INITIAL_UPGRADE_LEVELS,
   MAX_SAFE_GAME_INTEGER,
+  TYPE_SWITCH_COOLDOWN_MS,
 } from "../game/constants";
 import {
   addProgressToBoxer,
@@ -52,6 +54,8 @@ type GameActions = {
   setSpeedMultiplier: (multiplier: SpeedMultiplier) => void;
   manualAttack: () => void;
   triggerSkill: () => void;
+  // TASK-017: 단일 캐릭터 타입/성별 런타임 전환(강화·골드 유지, typeMultiplier 재적용).
+  switchType: (boxerType: BoxerType, gender: Gender) => void;
 };
 
 export type GameStore = GameState & GameActions;
@@ -173,6 +177,8 @@ export function createGameStore(
   let pausedAt: number | null = null;
   let lastSavedAt = initial.savedAt;
   let shouldPersistOffline = initial.shouldPersistOffline;
+  // TASK-017: 마지막 타입 전환 게임시각(휘발 클로저 변수, 저장 안 함). 쿨다운 악용 방지 판정에만 쓴다.
+  let lastTypeSwitchAt: number | null = null;
 
   // TASK-015: "게임 시간" 시계. combat의 모든 *At 필드는 게임 시간 기준이다.
   //  - 실시간(dependencies.now): 저장·throttle·pause/오프라인 정산용.
@@ -559,6 +565,42 @@ export function createGameStore(
           bossRemainingMs: getBossRemainingMs(nextCombat, now),
         });
         persist(killed);
+      },
+
+      // TASK-017: 단일 캐릭터의 타입/성별을 런타임 전환한다. 강화 레벨·골드·진행·콤보/쿨타임·보스 데드라인은
+      //   유지하고, combat.ts의 switchFighterType로 새 boxer/combat을 만든다(typeMultiplier 재적용 + HP 클램프).
+      //   가정/TODO: 전환 비용(TYPE_SWITCH_COST)은 P3 재화 도입(TASK-019) 전까지 무료 — 차감 미연결.
+      //   가정: 잦은 전환 악용 방지 쿨다운(TYPE_SWITCH_COOLDOWN_MS, 휘발). 0이면 무제한.
+      switchType: (boxerType, gender) => {
+        const state = get();
+        const { boxer, combat } = state;
+        if (!boxer || !combat) return;
+        // 같은 타입·성별이면 무동작(불필요한 persist/재예약 방지).
+        if (boxer.boxerType === boxerType && boxer.gender === gender) return;
+        const now = syncGameNow();
+        // 쿨다운 내 재전환은 무동작 + 안내 메시지(가정: TYPE_SWITCH_COOLDOWN_MS=0이면 항상 통과).
+        if (
+          TYPE_SWITCH_COOLDOWN_MS > 0 &&
+          lastTypeSwitchAt !== null &&
+          now < lastTypeSwitchAt + TYPE_SWITCH_COOLDOWN_MS
+        ) {
+          set({ message: "아직 타입을 바꿀 수 없습니다. 잠시 후 다시 시도하세요." });
+          return;
+        }
+        // TODO(TASK-019): TYPE_SWITCH_COST 다이아 차감 — P3 재화 도입 후 연결.
+        const switched = switchFighterType(boxer, combat, boxerType, gender, now);
+        lastTypeSwitchAt = now;
+        set({
+          boxer: switched.boxer,
+          combat: switched.combat,
+          comboGauge: switched.combat.comboGauge,
+          comboStep: switched.combat.comboStep,
+          bossRemainingMs: getBossRemainingMs(switched.combat, now),
+          message: "파이터 타입을 전환했습니다.",
+        });
+        // boxer.type/gender는 저장 항목이라 강제 저장한다(throttle 무시).
+        persist(true);
+        scheduleNext();
       },
     };
   });

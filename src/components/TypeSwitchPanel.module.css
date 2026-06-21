@@ -1,0 +1,125 @@
+/* TASK-017: 파이터 타입 전환 패널. 4종 카드 가로 스크롤 + 현재 선택 강조(GamePanel/CombatControls 톤 일관). */
+.panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: rgba(23, 28, 40, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #f6bb43;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.current {
+  margin: 0;
+  color: #cdd4e2;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.track {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card {
+  position: relative;
+  flex: 0 0 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: #10141d;
+  color: #cdd4e2;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.card:hover {
+  border-color: rgba(246, 187, 67, 0.6);
+}
+
+.cardCurrent {
+  border-color: #f6bb43;
+  background: rgba(246, 187, 67, 0.1);
+  box-shadow: 0 0 0 1px #f6bb43 inset;
+}
+
+.cardTitle {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #f4f6fb;
+}
+
+.cardTagline {
+  font-size: 0.76rem;
+  color: #9fa7b8;
+  line-height: 1.4;
+}
+
+.skills {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.skillsLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7c8499;
+}
+
+.skillList {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dfe4ee;
+  line-height: 1.4;
+}
+
+.passive {
+  font-size: 0.74rem;
+  color: #9fa7b8;
+}
+
+.badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f6bb43;
+  color: #10141d;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
