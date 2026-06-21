@@ -35,7 +35,7 @@ test.describe("생성과 자동 전투", () => {
     const saved = await page.evaluate((key) => window.localStorage.getItem(key), SAVE_KEY);
     expect(saved).not.toBeNull();
     const parsed = JSON.parse(saved as string);
-    expect(parsed.schemaVersion).toBe(5);
+    expect(parsed.schemaVersion).toBe(6);
     expect(parsed.boxer.boxerType).toBe("OUT_BOXER");
     expect(parsed.boxer.gender).toBe("FEMALE");
   });

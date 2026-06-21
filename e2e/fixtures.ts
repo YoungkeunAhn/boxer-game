@@ -5,14 +5,32 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v5";
+export const SAVE_KEY = "boxer-game.save.v6";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-export const SCHEMA_VERSION = 5;
-export const BALANCE_VERSION = 6;
+// 상수와 동기화(constants.ts): SCHEMA 6, BALANCE 9(나비스텝 쿨감 적용·스킬 장착 쿨타임 재정합 버그 수정).
+export const SCHEMA_VERSION = 6;
+export const BALANCE_VERSION = 9;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";
+export type SkillId =
+  | "liver_shot"
+  | "iron_guard"
+  | "pressure"
+  | "gazelle_punch"
+  | "dempsey_roll"
+  | "ghost_step"
+  | "navi_step"
+  | "step_back_counter"
+  | "phantom_jab"
+  | "distance_control";
+
+// 타입별 기본 장착 스킬(constants.DEFAULT_EQUIPPED_SKILLS와 동기화).
+const DEFAULT_EQUIPPED_SKILLS: Record<BoxerType, { active: SkillId[]; passive: SkillId | null }> = {
+  INFIGHTER: { active: ["liver_shot", "pressure", "dempsey_roll"], passive: "iron_guard" },
+  OUT_BOXER: { active: ["phantom_jab", "ghost_step", "navi_step"], passive: "step_back_counter" },
+};
 
 export type UpgradeKey =
   | "attackPower"
@@ -37,6 +55,7 @@ export type SeedOptions = {
   isFarming?: boolean;
   savedAtMs?: number;
   upgradeLevels?: Partial<Record<UpgradeKey, number>>;
+  equippedSkills?: { active: SkillId[]; passive: SkillId | null };
 };
 
 const ZERO_LEVELS: Record<UpgradeKey, number> = {
@@ -64,6 +83,7 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     isFarming = false,
     savedAtMs = CLOCK_TIME_MS,
     upgradeLevels = {},
+    equippedSkills = DEFAULT_EQUIPPED_SKILLS[boxerType],
   } = options;
 
   return JSON.stringify({
@@ -78,6 +98,7 @@ export function buildSaveJson(options: SeedOptions = {}): string {
       gold,
       totalKills,
       upgradeLevels: { ...ZERO_LEVELS, ...upgradeLevels },
+      equippedSkills,
     },
     position: { chapter, stage },
     isFarming,
@@ -167,8 +188,19 @@ export async function enterBoss(page: Page, options: SeedOptions = {}): Promise<
   await expect(page.getByTestId("combat-badge")).toHaveText("BOSS");
 }
 
+// v1.4a(TASK-011): 게임 화면형 UI에서 복서 HP·몬스터 HP·그로기·기본 스킬 쿨타임 바가 모두
+//   role="progressbar"이므로, 헬퍼는 data-testid로 스코프해 strict-mode 다중 매칭을 피한다.
+//   기존 hpBar()는 몬스터 HP 바를 가리키도록 유지한다(기존 스펙 호환).
 export function hpBar(page: Page) {
-  return page.getByRole("progressbar");
+  return page.getByTestId("monster-hp");
+}
+
+export function boxerHpBar(page: Page) {
+  return page.getByTestId("boxer-hp");
+}
+
+export function groggyBar(page: Page) {
+  return page.getByTestId("groggy-bar");
 }
 
 export async function hpNow(page: Page): Promise<number> {
