@@ -354,6 +354,11 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 //   두 직교 시스템(보스 그로기·전용 스킬 슬롯 ↔ 전투 컨트롤·재화/레벨·퀘스트)을 한 저장 형태로 합치면서
 //   SCHEMA를 두 라인의 최대(v6, v7)보다 한 단계 위인 v8로, BALANCE를 두 라인 누적(10, 8)을 합친 최종 11로 동결한다.
 //   저장 키 boxer-game.save.v8, 옛 v1~v7은 LEGACY_SAVE_KEYS로 안내(삭제 금지).
+// TASK-013 밸런스 확정(BALANCE 11): 시뮬레이션으로 타입별 보스 도달 페이싱을 측정한 결과 타입 보정이
+//   공격엔 없어 보스(30초 타임아웃) 공략에서 아웃복서가 크게 밀렸다(균형 강화 30분: 인파 C5 vs 아웃 C3).
+//   아웃복서에 글래스캐논 공격 배율(×2.0)을 도입해 균형 플레이 기준 인파이터와 보스 도달을 C5로 동률화했다.
+//   경험치 곡선·퀘스트/다이아 보상 등 경제 임시값은 시뮬상 합리적(Lv7~8/30분)이라 현 값으로 확정,
+//   세부 수치는 실기기 플레이테스트에서 재조정 여지를 남긴다(TODO). BALANCE 11이 통합+밸런스 최종 버전.
 export const SCHEMA_VERSION = 8;
 export const BALANCE_VERSION = 11;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
@@ -385,6 +390,11 @@ export type BoxerTypeModifiers = {
   counterMultiplier: number;
   // v1.3c: 보스 그로기 누적 배율. 인파이터>1(그로기 빠름), 아웃복서<1(그로기 느림).
   groggyGainMultiplier: number;
+  // TASK-013(BALANCE 11): 공격력 배율. 타입 보정이 공격엔 없어 보스(타임아웃) DPS가 동일했는데,
+  //   인파이터는 그로기 1.4배·고데미지 스킬로 보스 공략이 쉬운 반면 아웃복서(저HP·유틸 스킬)는
+  //   보스 벽에 막혔다(시뮬: 인파 C10 vs 아웃 C3). 아웃복서를 글래스캐논(저HP·고공격)으로 보정해
+  //   기본공격·스킬·카운터(전부 attackPower 기반)를 균일 상향, 타입 균형을 맞춘다.
+  attackMultiplier: number;
 };
 
 // === TASK-017 파이터 타입 외형 전환 ===
@@ -396,8 +406,10 @@ export const TYPE_SWITCH_COST = 0;
 export const TYPE_SWITCH_COOLDOWN_MS = 0;
 
 // 타입 전용 스킬 표시 메타데이터(infighter-skills.md/out-boxer-skills.md의 라벨).
-// 가정: 스킬 슬롯 시스템(TASK-010)이 아직 코드에 없어 실제 슬롯 교체가 아니라 표시용 세트로만 노출한다.
-//   TASK-010 도입 시 슬롯 기반 교체로 연결한다(TODO). 효과·수치는 미확정(가정, equip.md 참조).
+// TASK-013 통합 메모: 실제 스킬 슬롯 시스템(TASK-010)이 이제 코드에 있다(DEFAULT_EQUIPPED_SKILLS·
+//   SKILL_DEFINITIONS·data/skills.ts). 이 TYPE_SKILLS는 TypeSwitchPanel 카드의 표시용 라벨 세트로만
+//   남아 있어 실제 스킬 카탈로그와 중복된다 — TODO(정리): TypeSwitchPanel을 DEFAULT_EQUIPPED_SKILLS/
+//   SKILL_DEFINITIONS 기반으로 바꾸고 TYPE_SKILLS를 제거할 수 있다(이번 밸런스 범위 밖).
 export type TypeSkillSet = {
   active: readonly string[];
   passive: string;
@@ -615,6 +627,8 @@ export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers
     counterMultiplier: 0.5,
     // 확정(BALANCE 8): 그로기 누적 +40%(인파이터가 그로기로 공략).
     groggyGainMultiplier: 1.4,
+    // TASK-013(BALANCE 11): 공격 배율 기준(인파이터는 그로기·스킬로 공략).
+    attackMultiplier: 1.0,
   },
   OUT_BOXER: {
     // 확정(BALANCE 8): 체력·방어 -20%, 가드 피해감소 -10%, 회피 +60%, 카운터 +60%.
@@ -625,5 +639,12 @@ export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers
     counterMultiplier: 1.6,
     // 확정(BALANCE 8): 그로기 누적 -30%(아웃복서는 회피·카운터로 공략).
     groggyGainMultiplier: 0.7,
+    // 확정(BALANCE 11, TASK-013): 글래스캐논 공격 ×2.0(저HP·고공격). 시뮬레이션 측정 결과 타입 보정이
+    //   공격엔 없어 보스(30초 타임아웃) 공략에서 아웃복서가 크게 밀렸다(균형 강화 플레이 30분: 인파 C5 vs
+    //   아웃 C3). 인파이터는 그로기 1.4배·고데미지 스킬로 보스를 빠르게 깨는 반면, 아웃복서의 회피·유틸
+    //   스킬은 타임아웃 보스에 무력했다. 무한 HP 실험에서 아웃복서 DPS는 충분(C16)했으므로 병목은 '보스를
+    //   죽기 전에 빠르게 못 깸'이었고, 공격력을 올려 보스전 화력을 보강해 균형 플레이 기준 인파이터와 C5로
+    //   동률을 맞춘다. 기본공격·스킬·카운터가 전부 attackPower 기반이라 단일 배율로 균일 상향된다.
+    attackMultiplier: 2.0,
   },
 };

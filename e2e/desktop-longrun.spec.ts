@@ -32,7 +32,8 @@ test.describe("데스크톱·장시간 실행", () => {
     //   - RNG 동결(회피·치명타 실패) → 아웃복서 카운터(회피 성공 시 발동)·치명타 없음
     //   - 스킬 비움 → 액티브 스킬 피해 없음
     //   - 아웃복서 선택 → 인파이터 가드 카운터(몬스터 반격)가 끼지 않음
-    // 그러면 잽 데미지는 정확히 3으로 결정적이다. 중복 타이머라면 한 주기에 2번 닿아 6이 된다.
+    // 그러면 잽 데미지는 결정적이다: 0.3 × 공격력 20(아웃복서 글래스캐논 ×2.0 보정) = 6.
+    //   중복 타이머라면 한 주기에 2번 닿아 12가 된다.
     await freezeRandom(page);
     await seedSave(page, {
       chapter: 1,
@@ -50,7 +51,7 @@ test.describe("데스크톱·장시간 실행", () => {
       await page.clock.runFor(1_000);
       const current = await hpNow(page);
       const delta = prev - current;
-      expect(delta).toBe(3);
+      expect(delta).toBe(6);
       prev = current;
     }
   });

@@ -744,11 +744,23 @@ describe("오프라인 정산", () => {
     expect(progress.boxer.playerLevel).toBe(boxer.playerLevel);
   });
 
-  it("회피·카운터는 오프라인 수익에 영향을 주지 않는다(타입 무관 동일 정산)", () => {
+  it("회피·카운터 강화는 오프라인 수익에 영향을 주지 않는다(오프라인은 피격 미모델링)", () => {
+    // 같은 타입에서 회피·카운터 레벨만 다른 두 복서: 오프라인 정산은 피격을 모델링하지 않으므로
+    //   방어 계열 스탯과 무관하게 수익이 동일해야 한다(공격력은 동일).
+    const evasive: Boxer = {
+      ...outBoxer,
+      upgradeLevels: { ...outBoxer.upgradeLevels, dodge: 30, counter: 30 },
+    };
+    const base = calculateOfflineProgress(outBoxer, { chapter: 1, stage: 1 }, 10_000);
+    const evaded = calculateOfflineProgress(evasive, { chapter: 1, stage: 1 }, 10_000);
+    expect(base.kills).toBe(evaded.kills);
+    expect(base.gold).toBe(evaded.gold);
+  });
+
+  it("아웃복서(글래스캐논 ×2.0 공격)는 인파이터보다 오프라인 처치가 많다(타입 공격 보정 반영)", () => {
     const inf = calculateOfflineProgress(boxer, { chapter: 1, stage: 1 }, 10_000);
     const out = calculateOfflineProgress(outBoxer, { chapter: 1, stage: 1 }, 10_000);
-    expect(inf.kills).toBe(out.kills);
-    expect(inf.gold).toBe(out.gold);
+    expect(out.kills).toBeGreaterThan(inf.kills);
   });
 
   it("보스에서 이탈하면 직전 일반 스테이지를 정산한다", () => {

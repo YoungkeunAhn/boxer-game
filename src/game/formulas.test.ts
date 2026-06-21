@@ -131,6 +131,14 @@ describe("자동 전투 수식", () => {
     );
   });
 
+  it("TASK-013 밸런스: 아웃복서 글래스캐논 공격 배율(×2.0)로 인파이터의 2배 공격력", () => {
+    // attackPower 레벨 0: 인파 10(×1.0), 아웃 20(×2.0) — 반올림 없이 정확히 2배.
+    const inf = calculateCombatStats(zeroLevels, "INFIGHTER");
+    const out = calculateCombatStats(zeroLevels, "OUT_BOXER");
+    expect(inf.attackPower).toBe(10);
+    expect(out.attackPower).toBe(20);
+  });
+
   it("calculateGuardedDamage는 가드+방어 감소를 합산하고 최소 1을 보장한다", () => {
     const inf = calculateGuardedDamage(100, 0, "INFIGHTER");
     expect(inf).toEqual({ damage: 70, guarded: true });

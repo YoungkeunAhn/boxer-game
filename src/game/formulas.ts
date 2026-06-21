@@ -94,7 +94,7 @@ export function calculateCombatStats(
 
   return {
     attackPower: toSafeInteger(
-      INITIAL_COMBAT_STATS.attackPower * 1.2 ** levels.attackPower,
+      INITIAL_COMBAT_STATS.attackPower * 1.2 ** levels.attackPower * modifiers.attackMultiplier,
     ),
     attackSpeed: Math.min(5, 1 + levels.attackSpeed * 0.1),
     critRate: Math.min(0.5, 0.05 + levels.critRate * 0.01),

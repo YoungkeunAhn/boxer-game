@@ -10,7 +10,8 @@ import styles from "./TypeSwitchPanel.module.css";
 
 // TASK-017: 파이터 타입 외형 전환 패널(프레젠테이셔널). 4종(타입×성별) 카드를 가로 스크롤로 렌더하고
 //   현재 boxer.boxerType/gender 카드를 강조한다. 카드 클릭 시 switchType(type, gender)만 호출한다.
-//   타입별 전용 스킬(TYPE_SKILLS)은 표시용 메타데이터(슬롯 시스템 TASK-010 미구현 — TODO). combat/boxer null 가드.
+//   타입별 전용 스킬(TYPE_SKILLS)은 카드용 표시 라벨이다. 실제 슬롯 시스템(TASK-010)은 SkillPanel에 있고
+//   TYPE_SKILLS는 그와 중복이라 정리 후보(constants.ts TODO 참조). combat/boxer null 가드.
 type TypeGender = {
   boxerType: (typeof BOXER_TYPES)[number];
   gender: (typeof GENDERS)[number];
