@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
@@ -86,6 +87,9 @@ export function HomePage() {
         <div className={styles.status}>
           <BoxerStatus boxer={boxer} />
         </div>
+        {/* TASK-014: 표시 전용 전투 헤더. 헤더와 BoxerStatus/CombatPanel은 일부 정보가 중복되나,
+            중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
+        <CombatHeader />
         <CombatPanel />
         <UpgradePanel boxer={boxer} />
       </div>
