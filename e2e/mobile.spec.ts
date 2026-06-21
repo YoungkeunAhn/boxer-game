@@ -5,6 +5,7 @@ import {
   seedSave,
   createBoxer,
   enterBoss,
+  hpBar,
 } from "./fixtures";
 
 const section = (p: import("@playwright/test").Page, id: string) =>
@@ -68,7 +69,7 @@ test.describe("360px 모바일", () => {
     await enterBoss(page);
 
     const viewport = page.viewportSize()!;
-    const hp = await page.getByRole("progressbar").boundingBox();
+    const hp = await hpBar(page).boundingBox();
     const timer = await page.getByTestId("boss-timer").boundingBox();
     for (const box of [hp, timer]) {
       expect(box!.x).toBeGreaterThanOrEqual(0);

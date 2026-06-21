@@ -64,6 +64,9 @@ type GameActions = {
   triggerSkill: () => void;
   // TASK-017: 단일 캐릭터 타입/성별 런타임 전환(강화·골드 유지, typeMultiplier 재적용).
   switchType: (boxerType: BoxerType, gender: Gender) => void;
+  // TASK-020(P3): 주입 now(실시간 epoch ms) 읽기. 상단 바의 일일 리셋 타이머 표시 파생 전용 —
+  //   UI가 Date.now를 직접 호출하지 않고 주입된 시계에서 읽도록 한다(프로젝트 규칙·E2E 가짜 클럭 정합).
+  getNow: () => number;
 };
 
 export type GameStore = GameState & GameActions;
@@ -627,6 +630,8 @@ export function createGameStore(
         persist(true);
         scheduleNext();
       },
+      // TASK-020(P3): 주입 now 노출(표시 전용). 게임 상태 변경 없음 — 상단 바 일일 타이머 1초 갱신용.
+      getNow: () => dependencies.now(),
     };
   });
 }
@@ -651,4 +656,19 @@ export function selectExpProgress(boxer: Boxer | null): number {
 
 export function selectDailyResetRemainingMs(now: number): number {
   return dailyResetRemainingMs(now);
+}
+
+// TASK-020(P3): 하단 탭 알림 뱃지(빨강 점) 셀렉터. 수령 가능한 보상/신규가 있을 때만 true.
+//   현재는 backing state가 없어 항상 false를 반환한다(자리/메커니즘만 구현, 추측 단정 금지).
+//   - selectShopBadge: 무료 상자 수령 가능 시 true — 상점(TASK-023)에서 backing state 연결 예정. TODO.
+//   - selectQuestBadge: 완료·미수령 퀘스트 또는 마일스톤 상자 수령 가능 시 true — 퀘스트(TASK-021)에서 연결 예정. TODO.
+//   가방·경기장은 보류 탭이라 뱃지 없음(셀렉터 불필요).
+export function selectShopBadge(_state: GameState): boolean {
+  // TODO(TASK-023): 무료 상자 수령 가능 여부 backing state 연결.
+  return false;
+}
+
+export function selectQuestBadge(_state: GameState): boolean {
+  // TODO(TASK-021): 퀘스트 완료·마일스톤 수령 가능 여부 backing state 연결.
+  return false;
 }

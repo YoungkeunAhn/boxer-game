@@ -1,0 +1,91 @@
+.tabBar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 6px 8px;
+  /* safe-area-inset-bottom 반영(global.css body 패딩과 정합 — 본문 .page 하단 패딩으로 탭이 콘텐츠를 가리지 않게 한다). */
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid #232a37;
+  background: rgba(13, 17, 25, 0.96);
+  backdrop-filter: blur(8px);
+}
+
+.tab {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #8b93a4;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab[data-center="true"] .iconWrap {
+  transform: scale(1.18);
+}
+
+.tab[data-active="true"] {
+  color: #ff5a45;
+}
+
+.tab[data-active="true"] .icon {
+  filter: drop-shadow(0 0 6px rgba(255, 90, 69, 0.5));
+}
+
+.tab[data-locked="true"] {
+  color: #565d6c;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.iconWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.lock {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #0d1119;
+  border-radius: 50%;
+  background: #ff3b30;
+}
+
+.label {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

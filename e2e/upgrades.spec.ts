@@ -6,6 +6,7 @@ import {
   createBoxer,
   statValue,
   upgradeButton,
+  hpBar,
 } from "./fixtures";
 
 // docs/browser-smoke-checklist.md - 강화
@@ -110,9 +111,9 @@ test.describe("강화", () => {
     await expect(statValue(page, "attackSpeed")).toHaveText("1.1회/초");
 
     // 강화 후에도 공격이 정상 진행되고(타이머 중복 없이) HP가 줄어든다.
-    const max = Number(await page.getByRole("progressbar").getAttribute("aria-valuemax"));
+    const max = Number(await hpBar(page).getAttribute("aria-valuemax"));
     await page.clock.runFor(1000);
-    const after = Number(await page.getByRole("progressbar").getAttribute("aria-valuenow"));
+    const after = Number(await hpBar(page).getAttribute("aria-valuenow"));
     expect(after).toBeLessThan(max);
     // 1주기 동안 한 번의 공격만 반영(중복 타이머면 2회 이상 감소). 1.1회/초 → 1타 데미지 10~20.
     expect(max - after).toBeLessThanOrEqual(20);
