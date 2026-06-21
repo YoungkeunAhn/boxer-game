@@ -2,12 +2,17 @@ import { useEffect } from "react";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
+import { SkillCooldownBar } from "../components/SkillCooldownBar";
 import { UpgradePanel } from "../components/UpgradePanel";
+import { SkillPanel } from "../components/SkillPanel";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./HomePage.module.css";
 
 export function HomePage() {
   const boxer = useGameStore((state) => state.boxer);
+  const combat = useGameStore((state) => state.combat);
+  // 기본 공격 쿨타임 진행도 표시용 기준 시각. 스토어가 틱마다 set하여 리렌더되면 함께 갱신된다.
+  //   표시 전용이며 UI에 별도 타이머/로직을 추가하지 않는다(프레젠테이셔널 원칙).
   const offlineSummary = useGameStore((state) => state.offlineSummary);
   const message = useGameStore((state) => state.message);
   const storageWarning = useGameStore((state) => state.storageWarning);
@@ -82,12 +87,18 @@ export function HomePage() {
         </p>
       )}
 
-      <div className={styles.grid}>
-        <div className={styles.status}>
+      <div className={styles.screen}>
+        <div className={styles.top}>
           <BoxerStatus boxer={boxer} />
         </div>
-        <CombatPanel />
-        <UpgradePanel boxer={boxer} />
+        <div className={styles.center}>
+          <CombatPanel />
+        </div>
+        <div className={styles.bottom}>
+          {combat && <SkillCooldownBar boxer={boxer} combat={combat} now={Date.now()} />}
+          <SkillPanel boxer={boxer} />
+          <UpgradePanel boxer={boxer} />
+        </div>
       </div>
     </main>
   );

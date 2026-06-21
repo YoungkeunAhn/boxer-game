@@ -54,8 +54,45 @@ const UPGRADE_LABELS: Record<UpgradeKey, { name: string; value: (boxer: Boxer) =
   },
 };
 
+// 기본 계열(공격) / 방어 계열로 그룹핑한다. UpgradeKey 9종은 그대로 노출한다.
+const OFFENSE_KEYS: UpgradeKey[] = ["attackPower", "attackSpeed", "critRate", "critDamage", "goldBonus"];
+const DEFENSE_KEYS: UpgradeKey[] = ["maxHp", "defense", "dodge", "counter"];
+
 export function UpgradePanel({ boxer }: UpgradePanelProps) {
   const upgrade = useGameStore((state) => state.upgrade);
+
+  const renderRow = (key: UpgradeKey) => {
+    const level = boxer.upgradeLevels[key];
+    const cost = calculateUpgradeCost(key, level);
+    const isMax = isUpgradeAtMaxLevel(key, level);
+    const label = UPGRADE_LABELS[key];
+    const currentValue = label.value(boxer);
+    const nextValue = isMax
+      ? null
+      : label.value({
+          ...boxer,
+          upgradeLevels: { ...boxer.upgradeLevels, [key]: level + 1 },
+        });
+    return (
+      <div className={styles.upgradeRow} key={key} data-testid={`upgrade-row-${key}`}>
+        <div>
+          <strong>{label.name} <small>Lv. {level}</small></strong>
+          <span>
+            {currentValue} {nextValue ? `→ ${nextValue}` : "· MAX"}
+          </span>
+        </div>
+        <button
+          className={styles.upgradeButton}
+          data-testid={`upgrade-button-${key}`}
+          disabled={isMax || boxer.gold < cost}
+          type="button"
+          onClick={() => upgrade(key)}
+        >
+          {isMax ? "MAX" : `${cost.toLocaleString()} G`}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <section className={styles.panel} aria-labelledby="upgrade-title">
@@ -67,40 +104,11 @@ export function UpgradePanel({ boxer }: UpgradePanelProps) {
         </div>
       </div>
 
-      <div className={styles.upgradeList}>
-        {(Object.keys(UPGRADE_LABELS) as UpgradeKey[]).map((key) => {
-          const level = boxer.upgradeLevels[key];
-          const cost = calculateUpgradeCost(key, level);
-          const isMax = isUpgradeAtMaxLevel(key, level);
-          const label = UPGRADE_LABELS[key];
-          const currentValue = label.value(boxer);
-          const nextValue = isMax
-            ? null
-            : label.value({
-                ...boxer,
-                upgradeLevels: { ...boxer.upgradeLevels, [key]: level + 1 },
-              });
-          return (
-            <div className={styles.upgradeRow} key={key} data-testid={`upgrade-row-${key}`}>
-              <div>
-                <strong>{label.name} <small>Lv. {level}</small></strong>
-                <span>
-                  {currentValue} {nextValue ? `→ ${nextValue}` : "· MAX"}
-                </span>
-              </div>
-              <button
-                className={styles.upgradeButton}
-                data-testid={`upgrade-button-${key}`}
-                disabled={isMax || boxer.gold < cost}
-                type="button"
-                onClick={() => upgrade(key)}
-              >
-                {isMax ? "MAX" : `${cost.toLocaleString()} G`}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      <p className={styles.groupLabel}>공격 계열</p>
+      <div className={styles.upgradeList}>{OFFENSE_KEYS.map(renderRow)}</div>
+
+      <p className={styles.groupLabel}>방어 계열</p>
+      <div className={styles.upgradeList}>{DEFENSE_KEYS.map(renderRow)}</div>
     </section>
   );
 }

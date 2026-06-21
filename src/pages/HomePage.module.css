@@ -1,5 +1,5 @@
 .page {
-  width: min(100% - 32px, 960px);
+  width: min(100% - 32px, 480px);
   min-width: 0;
   margin: 0 auto;
   padding: 42px 0 64px;
@@ -83,36 +83,35 @@
   overflow-wrap: anywhere;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 상/중/하 한 열 게임 화면형 레이아웃. 360px·데스크톱 모두 한 열을 유지한다. */
+.screen {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   gap: 16px;
 }
 
-.grid > * {
+.screen > * {
   min-width: 0;
 }
 
-.status {
-  grid-row: span 2;
+.top,
+.center,
+.bottom {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
 }
 
 @media (max-width: 720px) {
   .page {
-    width: min(100% - 24px, 960px);
+    width: min(100% - 24px, 480px);
     padding-top: 28px;
   }
 
   .hero {
     align-items: flex-start;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
-  .status {
-    grid-row: auto;
   }
 }
 
