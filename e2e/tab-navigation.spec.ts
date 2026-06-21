@@ -59,19 +59,19 @@ test.describe("탭 네비게이션·상단 바", () => {
     await expect(page.locator("#combat-title")).toBeVisible();
   });
 
-  test("퀘스트 탭으로 전환하면 플레이스홀더가 보이고 파이터로 복귀한다", async ({ page }) => {
+  test("퀘스트 탭으로 전환하면 퀘스트 패널이 보이고 파이터로 복귀한다", async ({ page }) => {
     await seedSave(page);
     await gotoFrozen(page);
 
     await tab(page, "quest").click();
     await expect(tab(page, "quest")).toHaveAttribute("data-active", "true");
-    await expect(page.getByTestId("quest-placeholder")).toBeVisible();
+    await expect(page.getByTestId("quest-panel")).toBeVisible();
     await expect(page.locator("#combat-title")).toBeHidden();
 
     await tab(page, "fighter").click();
     await expect(tab(page, "fighter")).toHaveAttribute("data-active", "true");
     await expect(page.locator("#combat-title")).toBeVisible();
-    await expect(page.getByTestId("quest-placeholder")).toBeHidden();
+    await expect(page.getByTestId("quest-panel")).toBeHidden();
   });
 
   test("보류 탭(상점·가방·경기장)은 잠금·비활성이고 강제 클릭해도 파이터 화면을 유지한다", async ({

@@ -168,6 +168,71 @@ export type GameState = {
   //  - speedMultiplier: 게임 시간 배속(x1/x2). 보스 타임아웃은 게임 시간 기준이라 밸런스 불변.
   autoMode: AutoMode;
   speedMultiplier: SpeedMultiplier;
+  // TASK-021(P3): 퀘스트 진행 상태(저장 대상). boxer가 없으면 빈 초기 상태로 둔다.
+  questState: QuestState;
+};
+
+// === TASK-021(P3) 퀘스트 시스템 — 추적 가능한 목표만, 보상은 골드·다이아 ===
+//   카테고리: 일일/주간/도전/업적. 일일·주간은 리셋, 도전·업적은 영구(비리셋).
+export type QuestCategory = "daily" | "weekly" | "challenge" | "achievement";
+
+// 추적 가능한 목표 타입만 채택한다. 보류 시스템 의존 목표(enhanceEquip/enhanceTraining)는 제외.
+//   - stageClear: 일반 스테이지 전진 횟수.
+//   - bossClear: 보스 클리어(다음 챕터 진입) 횟수.
+//   - killMonster: 몬스터 처치 누적(boxer.totalKills의 일일 시작 스냅샷 기준 증분).
+//   - upgradeStat: 강화(purchaseUpgrade 성공) 횟수(9종 합산).
+//   - autoBattleMinutes: 자동 전투 누적 분(주입 now 기준 온라인 경과만 — 가정).
+//   - claimFreeChest: 무료 상자 수령 횟수(상점 골격 — TASK-023 연결 TODO).
+//   - playerLevelUp: 플레이어 레벨업 횟수.
+export type QuestGoalType =
+  | "stageClear"
+  | "bossClear"
+  | "killMonster"
+  | "upgradeStat"
+  | "autoBattleMinutes"
+  | "claimFreeChest"
+  | "playerLevelUp";
+
+// 보상은 골드·다이아만(아이템·에너지 제외).
+export type QuestReward = { gold?: number; diamond?: number };
+
+// 퀘스트 정의(정적 카탈로그 — 저장하지 않는다).
+export type QuestDef = {
+  id: string;
+  category: QuestCategory;
+  goalType: QuestGoalType;
+  target: number; // 3회·30마리·20분 등.
+  reward: QuestReward;
+  points: number; // 일일 진행도 마일스톤 기여 점수.
+  title: string;
+  description: string;
+};
+
+// 진행 추적에 쓰는 이벤트(스토어가 순수 함수로 전달).
+export type QuestEventType =
+  | "stageClear"
+  | "bossClear"
+  | "upgradeStat"
+  | "claimFreeChest"
+  | "playerLevelUp";
+
+// 일일 시작 스냅샷이 필요한 비리셋 누적값의 키(현재는 처치 수만).
+export type QuestSnapshotKey = "killMonster" | "autoBattleMinutes";
+
+// 퀘스트 진행 상태(저장 대상 — SaveData의 top-level 필드). 정의(QuestDef)와 분리한다.
+export type QuestState = {
+  // questId → 현재 진행값.
+  progress: Record<string, number>;
+  // questId → 보상 수령 여부(중복 수령 방지).
+  claimed: Record<string, boolean>;
+  // 일일 진행도 누적 점수(예 45/100).
+  dailyPoints: number;
+  // 수령한 마일스톤 구간(예 [20, 40]).
+  milestonesClaimed: number[];
+  // 일일 시작 시 비리셋 누적값 스냅샷(killMonster 등). 증분 계산 기준.
+  dailySnapshot: Record<QuestSnapshotKey, number>;
+  // 다음 리셋 epoch ms(주입 now 기준 순수 파생).
+  resetAt: { daily: number; weekly: number };
 };
 
 export type SaveDataV2 = {
@@ -185,4 +250,8 @@ export type SaveDataV5 = SaveDataV4;
 // TASK-019(P3): diamond/playerLevel/playerExp가 Boxer에 추가돼 SaveDataV2 파이프라인(boxer 통째 직렬화)을
 //   그대로 타고 저장된다. SaveData 형태 자체는 동일하나 boxer 내부 필드가 늘어 SCHEMA 5→6 범프.
 export type SaveDataV6 = SaveDataV5;
-export type SaveData = SaveDataV6;
+// TASK-021(P3): questState가 SaveData의 새 top-level 필드로 추가돼 저장 형태가 바뀐다 → SCHEMA 6→7 범프.
+export type SaveDataV7 = SaveDataV6 & {
+  questState: QuestState;
+};
+export type SaveData = SaveDataV7;

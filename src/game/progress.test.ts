@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dailyResetRemainingMs, nextDailyResetAt } from "./progress";
+import { dailyResetRemainingMs, nextDailyResetAt, nextWeeklyResetAt } from "./progress";
 
 // 주의: progress.ts는 로컬 타임존(new Date(now)의 로컬 시/분) 기준이므로, 테스트도 로컬 기준으로
 //   "다음 로컬 자정"을 직접 계산해 비교한다(특정 타임존 가정 없이 실행 환경 로컬과 정합).
@@ -57,5 +57,40 @@ describe("TASK-019 일일 리셋 타이머(주입 now 순수 함수)", () => {
   it("비유한 now는 거부한다", () => {
     expect(() => nextDailyResetAt(Number.NaN)).toThrow(RangeError);
     expect(() => nextDailyResetAt(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+// 동어반복(self-comparison) 대신 고정 epoch 기대값으로 요일 오프셋·경계 산술을 직접 검증한다.
+//   기준: WEEKLY_RESET_DAY=1(월요일), DAILY_RESET_HOUR=0(로컬 자정).
+//   2026-06-21은 일요일, 2026-06-22가 월요일, 2026-06-29가 그 다음 월요일이다.
+describe("TASK-021 주간 리셋(주입 now 순수 함수)", () => {
+  const MON_0622 = new Date(2026, 5, 22, 0, 0, 0, 0).getTime();
+  const MON_0629 = new Date(2026, 5, 29, 0, 0, 0, 0).getTime();
+
+  it("2026-06-22는 실제 월요일이다(기준 전제 가드)", () => {
+    expect(new Date(MON_0622).getDay()).toBe(1);
+  });
+
+  it("일요일 정오면 다가오는 월요일 자정을 반환한다", () => {
+    const sunNoon = new Date(2026, 5, 21, 12, 0, 0, 0).getTime();
+    expect(nextWeeklyResetAt(sunNoon)).toBe(MON_0622);
+  });
+
+  it("주중(수요일)이면 다가오는 월요일 자정을 반환한다", () => {
+    const wed = new Date(2026, 5, 24, 9, 30, 0, 0).getTime();
+    expect(nextWeeklyResetAt(wed)).toBe(MON_0629);
+  });
+
+  it("정확히 월요일 자정이면 경계에서 다음 주 월요일을 반환한다(+7일, 0이 되지 않게)", () => {
+    expect(nextWeeklyResetAt(MON_0622)).toBe(MON_0629);
+  });
+
+  it("월요일 자정 직후도 다음 주 월요일을 반환한다", () => {
+    const justAfterMon = new Date(2026, 5, 22, 0, 0, 1, 0).getTime();
+    expect(nextWeeklyResetAt(justAfterMon)).toBe(MON_0629);
+  });
+
+  it("비유한 now는 거부한다", () => {
+    expect(() => nextWeeklyResetAt(Number.NaN)).toThrow(RangeError);
   });
 });

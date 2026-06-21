@@ -5,12 +5,12 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v6";
+export const SAVE_KEY = "boxer-game.save.v7";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-// TASK-019(P3): 재화·플레이어 레벨 도입 → SCHEMA 5→6, BALANCE 6→7.
-export const SCHEMA_VERSION = 6;
-export const BALANCE_VERSION = 7;
+// TASK-021(P3): 퀘스트 시스템 도입 → SCHEMA 6→7, BALANCE 7→8.
+export const SCHEMA_VERSION = 7;
+export const BALANCE_VERSION = 8;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";
@@ -42,7 +42,34 @@ export type SeedOptions = {
   diamond?: number;
   playerLevel?: number;
   playerExp?: number;
+  // TASK-021(P3): 퀘스트 상태 시드(기본: 빈 진행, 리셋 시각은 CLOCK_TIME_MS 이후 먼 미래로 둬 로드 시 리셋이 일어나지 않게 한다).
+  questState?: QuestStateSeed;
 };
+
+// 저장 v7의 questState 형태(save.ts isQuestState를 통과해야 한다).
+export type QuestStateSeed = {
+  progress?: Record<string, number>;
+  claimed?: Record<string, boolean>;
+  dailyPoints?: number;
+  milestonesClaimed?: number[];
+  dailySnapshot?: { killMonster: number; autoBattleMinutes: number };
+  resetAt?: { daily: number; weekly: number };
+};
+
+// 기본 리셋 시각: CLOCK_TIME_MS(2026-01-01) 기준 충분히 먼 미래(로드 시 리셋 트리거 방지).
+const FAR_FUTURE_DAILY = CLOCK_TIME_MS + 24 * 60 * 60 * 1_000;
+const FAR_FUTURE_WEEKLY = CLOCK_TIME_MS + 7 * 24 * 60 * 60 * 1_000;
+
+function buildQuestState(seed: QuestStateSeed = {}) {
+  return {
+    progress: seed.progress ?? {},
+    claimed: seed.claimed ?? {},
+    dailyPoints: seed.dailyPoints ?? 0,
+    milestonesClaimed: seed.milestonesClaimed ?? [],
+    dailySnapshot: seed.dailySnapshot ?? { killMonster: 0, autoBattleMinutes: 0 },
+    resetAt: seed.resetAt ?? { daily: FAR_FUTURE_DAILY, weekly: FAR_FUTURE_WEEKLY },
+  };
+}
 
 const ZERO_LEVELS: Record<UpgradeKey, number> = {
   attackPower: 0,
@@ -72,6 +99,7 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     diamond = 0,
     playerLevel = 1,
     playerExp = 0,
+    questState = {},
   } = options;
 
   return JSON.stringify({
@@ -93,6 +121,8 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     },
     position: { chapter, stage },
     isFarming,
+    // TASK-021(P3): 퀘스트 상태(없으면 isQuestState 실패 → 로드 시 invalid).
+    questState: buildQuestState(questState),
   });
 }
 

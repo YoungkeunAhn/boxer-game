@@ -1,4 +1,4 @@
-import { DAILY_RESET_HOUR } from "./constants";
+import { DAILY_RESET_HOUR, WEEKLY_RESET_DAY } from "./constants";
 
 // TASK-019(P3): 일일 콘텐츠 리셋 타이머 — 순수 시간 로직.
 //   상단 바의 ⏱ 표시는 (에너지 미채택이므로) 에너지 회복이 아니라 "다음 일일 리셋까지 남은 시간"이다.
@@ -33,4 +33,29 @@ export function nextDailyResetAt(now: number): number {
 // 주입 now 기준 다음 일일 리셋까지 남은 ms(항상 0 이상). 표시 타이머 = dailyResetRemainingMs(now).
 export function dailyResetRemainingMs(now: number): number {
   return Math.max(0, nextDailyResetAt(now) - now);
+}
+
+// TASK-021(P3 퀘스트): 주간 리셋 — 다음 로컬 WEEKLY_RESET_DAY요일(가정: 월요일) DAILY_RESET_HOUR시(=자정) epoch ms.
+//   now가 정확히 리셋 시각이면 다음 주를 반환한다(경계에서 0이 되지 않게 +7일). 주입 now 기준 순수 함수.
+export function nextWeeklyResetAt(now: number): number {
+  if (!Number.isFinite(now)) {
+    throw new RangeError("now는 유한한 epoch ms여야 합니다.");
+  }
+  const date = new Date(now);
+  // 오늘 로컬 자정(리셋 시각)에서 시작해, 다음 WEEKLY_RESET_DAY요일까지 일 수를 더한다.
+  const reset = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    DAILY_RESET_HOUR,
+    0,
+    0,
+    0,
+  );
+  const daysUntil = (WEEKLY_RESET_DAY - reset.getDay() + 7) % 7;
+  reset.setDate(reset.getDate() + daysUntil);
+  if (reset.getTime() <= now) {
+    reset.setDate(reset.getDate() + 7);
+  }
+  return reset.getTime();
 }
