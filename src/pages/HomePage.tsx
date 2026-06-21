@@ -4,6 +4,7 @@ import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
+import { TypeSwitchPanel } from "../components/TypeSwitchPanel";
 import { UpgradePanel } from "../components/UpgradePanel";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./HomePage.module.css";
@@ -94,6 +95,8 @@ export function HomePage() {
         <CombatPanel />
         {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
         <CombatControls />
+        {/* TASK-017: 파이터 타입 외형 전환 패널(4종 카드). boxer/combat null이면 내부에서 null 가드. */}
+        <TypeSwitchPanel />
         <UpgradePanel boxer={boxer} />
       </div>
     </main>

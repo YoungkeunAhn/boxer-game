@@ -16,6 +16,7 @@ import {
   selectAttackType,
   selectHand,
   stepCombat,
+  switchFighterType,
 } from "./combat";
 import { calculateCombatStats } from "./formulas";
 import type { AttackBeat, AttackType, Boxer, CombatRuntime, UpgradeLevels } from "./types";
@@ -516,5 +517,79 @@ describe("오프라인 정산", () => {
       OFFLINE_MAX_DURATION_MS * 2,
     );
     expect(capped.elapsedMs).toBe(OFFLINE_MAX_DURATION_MS);
+  });
+});
+
+describe("타입 전환(switchFighterType)", () => {
+  // 강화 레벨이 섞인 복서(maxHp 차이를 만들기 위해 체력 레벨을 충분히 둔다).
+  const leveled: Boxer = {
+    ...boxer,
+    gold: 12_345,
+    totalKills: 7,
+    upgradeLevels: { ...zeroLevels, maxHp: 10, dodge: 20, counter: 20, defense: 5 },
+  };
+
+  it("강화 레벨·골드·진행 위치·monsterHp를 보존한다", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 2, stage: 3 }, 1_000);
+    const damaged = { ...combat, monsterHp: 42 };
+    const result = switchFighterType(leveled, damaged, "OUT_BOXER", "FEMALE", 2_000);
+    expect(result.boxer.gold).toBe(12_345);
+    expect(result.boxer.totalKills).toBe(7);
+    expect(result.boxer.upgradeLevels).toEqual(leveled.upgradeLevels);
+    expect(result.combat.position).toEqual({ chapter: 2, stage: 3 });
+    expect(result.combat.monsterHp).toBe(42);
+  });
+
+  it("INFIGHTER→OUT_BOXER 전환 시 maxHp/defense/dodge/counter가 typeMultiplier로 재계산된다", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 1, stage: 1 }, 0);
+    const result = switchFighterType(leveled, combat, "OUT_BOXER", "MALE", 1_000);
+    const expected = calculateCombatStats(leveled.upgradeLevels, "OUT_BOXER");
+    const infighter = calculateCombatStats(leveled.upgradeLevels, "INFIGHTER");
+    expect(result.boxer.boxerType).toBe("OUT_BOXER");
+    expect(result.combat.boxerMaxHp).toBe(expected.maxHp);
+    // 타입 보정이 실제로 달라졌는지(아웃복서는 maxHp/defense 낮음, dodge/counter 높음).
+    expect(expected.maxHp).toBeLessThan(infighter.maxHp);
+    expect(expected.defense).toBeLessThan(infighter.defense);
+    expect(expected.dodge).toBeGreaterThan(infighter.dodge);
+    expect(expected.counter).toBeGreaterThan(infighter.counter);
+  });
+
+  it("현재 boxerHp가 새 maxHp를 초과하면 클램프하고, 미만이면 유지한다(풀충전 아님)", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 1, stage: 1 }, 0);
+    const infighterMaxHp = combat.boxerMaxHp;
+    // 아웃복서로 전환하면 maxHp가 줄어 현재 HP가 새 최대치로 클램프된다.
+    const fullHp = { ...combat, boxerHp: infighterMaxHp };
+    const shrunk = switchFighterType(leveled, fullHp, "OUT_BOXER", "MALE", 1_000);
+    expect(shrunk.combat.boxerHp).toBe(shrunk.combat.boxerMaxHp);
+    expect(shrunk.combat.boxerMaxHp).toBeLessThan(infighterMaxHp);
+    // HP가 새 maxHp 미만이면 그대로 유지(자동 보충 없음).
+    const lowHp = { ...combat, boxerHp: 10 };
+    const kept = switchFighterType(leveled, lowHp, "OUT_BOXER", "MALE", 1_000);
+    expect(kept.combat.boxerHp).toBe(10);
+  });
+
+  it("gender만 바뀌면 능력치는 동일하다(타입 보정 불변)", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 1, stage: 1 }, 0);
+    const result = switchFighterType(leveled, combat, "INFIGHTER", "FEMALE", 1_000);
+    expect(result.boxer.gender).toBe("FEMALE");
+    expect(result.boxer.boxerType).toBe("INFIGHTER");
+    expect(result.combat.boxerMaxHp).toBe(combat.boxerMaxHp);
+  });
+
+  it("보스 진행 중(bossDeadlineAt) 데드라인을 보존한다", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 1, stage: 5 }, 0);
+    expect(combat.bossDeadlineAt).not.toBeNull();
+    const result = switchFighterType(leveled, combat, "OUT_BOXER", "MALE", 1_000);
+    expect(result.combat.bossDeadlineAt).toBe(combat.bossDeadlineAt);
+    expect(result.combat.position).toEqual({ chapter: 1, stage: 5 });
+  });
+
+  it("입력 boxer/combat 객체를 변이하지 않는다", () => {
+    const combat = createCombatRuntime(leveled, { chapter: 1, stage: 1 }, 0);
+    const boxerSnapshot = JSON.parse(JSON.stringify(leveled));
+    const combatSnapshot = JSON.parse(JSON.stringify(combat));
+    switchFighterType(leveled, combat, "OUT_BOXER", "FEMALE", 1_000);
+    expect(leveled).toEqual(boxerSnapshot);
+    expect(combat).toEqual(combatSnapshot);
   });
 });
