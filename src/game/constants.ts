@@ -1,11 +1,13 @@
 import type {
   AttackBeat,
   AttackType,
+  AutoMode,
   BoxerType,
   CombatStats,
   ComboId,
   Gender,
   Hand,
+  SpeedMultiplier,
   UpgradeKey,
   UpgradeLevels,
 } from "./types";
@@ -187,6 +189,18 @@ export const COMBO_GAUGE_MAX = 100;
 // 가정: 콤보 끊김 조건은 1차 구현에서 '시퀀스 이탈/킬·전이·넉다운·보스 타임아웃 리셋'만 적용한다.
 //   시간 초과 끊김(COMBO_WINDOW_MS)은 attackHistory에 타임스탬프가 필요해 복잡도가 높으므로 TODO로 남긴다(가정).
 
+// === TASK-015 전투 컨트롤(AUTO·배속·수동) — 휘발 UI 상태(저장 안 함) ===
+// 가정: 배속 단계는 x1/x2만(확장은 추후, x4 이상은 이번 범위 밖). 임시값.
+export const SPEED_MULTIPLIERS = [1, 2] as const satisfies readonly SpeedMultiplier[];
+// 가정: 기본 배속 x1, 기본 모드 AUTO(현행 자동 전투 유지). 임시값.
+export const DEFAULT_SPEED_MULTIPLIER: SpeedMultiplier = 1;
+export const DEFAULT_AUTO_MODE: AutoMode = "AUTO";
+// 가정: 수동 스킬(피니시)은 콤보 게이지 가득(COMBO_GAUGE_MAX) 시 AUTO OFF에서 버튼으로 1회 발동.
+//   스킬 슬롯 시스템(TASK-010)이 아직 없어, equip.md의 Slot1>2>3 우선순위를 구현할 대상이 없다.
+//   → 임시로 '콤보 게이지 소비형 피니시 1종'으로 한정한다(데미지 ×FINISHER_DAMAGE_MULT).
+//   TASK-010 스킬 슬롯 도입 시 이 임시 스킬을 슬롯 기반으로 교체한다(TODO).
+export const FINISHER_DAMAGE_MULT = 3;
+
 export const BOSS_TIME_LIMIT_MS = 30_000;
 export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 // v4(TASK-005): HP·방어 강화 추가 → SCHEMA 3→4, 몬스터 공격·HP/방어 곡선·타입 maxHp/defense 계수 → BALANCE 2→3.
@@ -196,6 +210,8 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 // v1.3b(TASK-008): 콤비네이션 보너스·콤보 게이지 도입. 콤보 상태는 CombatRuntime 런타임 전용 필드라
 //   저장 형태(Boxer/SaveData) 불변 → SCHEMA 유지(5). 콤비네이션 보너스(데미지 배수·치명타 가산)라는
 //   새 밸런스 수식 도입 → BALANCE 5→6.
+// TASK-015: 전투 컨트롤(AUTO/배속/수동) 도입 — 컨트롤은 휘발 UI 상태(저장 안 함), 보스 타임아웃은
+//   게임 시간 기준이라 배속이 진행/처치/골드/타임아웃 결과를 바꾸지 않음 → SCHEMA/BALANCE 불변.
 export const SCHEMA_VERSION = 5;
 export const BALANCE_VERSION = 6;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;

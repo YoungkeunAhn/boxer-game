@@ -8,10 +8,27 @@ import {
   retryBoss as createBossRetry,
   stepCombat,
 } from "../game/combat";
-import { DEFAULT_BOXER_TYPE, DEFAULT_GENDER, INITIAL_UPGRADE_LEVELS } from "../game/constants";
-import { calculateCombatStats, purchaseUpgrade } from "../game/formulas";
+import {
+  COMBO_GAUGE_MAX,
+  DEFAULT_AUTO_MODE,
+  DEFAULT_BOXER_TYPE,
+  DEFAULT_GENDER,
+  DEFAULT_SPEED_MULTIPLIER,
+  FINISHER_DAMAGE_MULT,
+  INITIAL_UPGRADE_LEVELS,
+  MAX_SAFE_GAME_INTEGER,
+} from "../game/constants";
+import {
+  addProgressToBoxer,
+  calculateCombatStats,
+  calculateComboAdjustedDamage,
+  calculateGoldReward,
+  purchaseUpgrade,
+} from "../game/formulas";
+import { getNextStagePosition } from "../data/stages";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
 import type {
+  AutoMode,
   Boxer,
   BoxerType,
   ComboId,
@@ -19,6 +36,7 @@ import type {
   GameState,
   Gender,
   MonsterAttackResult,
+  SpeedMultiplier,
   UpgradeKey,
 } from "../game/types";
 
@@ -29,6 +47,11 @@ type GameActions = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
+  // TASK-015: 전투 컨트롤. AUTO 토글·배속·수동 탭·수동 스킬(피니시).
+  toggleAuto: () => void;
+  setSpeedMultiplier: (multiplier: SpeedMultiplier) => void;
+  manualAttack: () => void;
+  triggerSkill: () => void;
 };
 
 export type GameStore = GameState & GameActions;
@@ -64,6 +87,9 @@ const EMPTY_STATE: GameState = {
   comboGauge: 0,
   comboStep: 0,
   lastCombo: null,
+  // TASK-015: 전투 컨트롤 기본값(휘발 UI 상태). AUTO·x1.
+  autoMode: DEFAULT_AUTO_MODE,
+  speedMultiplier: DEFAULT_SPEED_MULTIPLIER,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -148,7 +174,24 @@ export function createGameStore(
   let lastSavedAt = initial.savedAt;
   let shouldPersistOffline = initial.shouldPersistOffline;
 
+  // TASK-015: "게임 시간" 시계. combat의 모든 *At 필드는 게임 시간 기준이다.
+  //  - 실시간(dependencies.now): 저장·throttle·pause/오프라인 정산용.
+  //  - 게임 시간(gameNow): 전투 진행·보스 타임아웃용. 배속 시 실시간 경과 × speedMultiplier로 누적.
+  // 초기에는 gameNow == 실시간이라 init에서 만든 combat 필드와 정렬된다.
+  let lastRealNow = initialNow;
+  let gameNow = initialNow;
+
   return create<GameStore>((set, get) => {
+    // 마지막 동기화 이후 흐른 실시간을 현재 배속으로 환산해 게임 시간을 전진시킨다.
+    const syncGameNow = (): number => {
+      const realNow = dependencies.now();
+      const deltaReal = Math.max(0, realNow - lastRealNow);
+      const multiplier = get().speedMultiplier;
+      gameNow += deltaReal * multiplier;
+      lastRealNow = realNow;
+      return gameNow;
+    };
+
     const clearTimer = () => {
       if (timerHandle !== null) dependencies.cancelSchedule(timerHandle);
       timerHandle = null;
@@ -254,23 +297,29 @@ export function createGameStore(
     const scheduleNext = () => {
       clearTimer();
       const state = get();
-      if (!state.isRunning || !state.boxer || !state.combat) return;
-      const now = dependencies.now();
+      // TASK-015: AUTO OFF(MANUAL)면 자동 타이머를 예약하지 않는다(유일 타이머 구조 유지).
+      //   강화·재도전·재개 등 다른 진입점이 scheduleNext를 호출해도 MANUAL이면 진행이 멈춘다.
+      if (!state.isRunning || state.autoMode !== "AUTO" || !state.boxer || !state.combat) return;
+      // 게임 시간을 현 시점까지 정산한 뒤(배속 누적), 다음 게임 이벤트까지의 실시간 지연을 역환산한다.
+      const now = syncGameNow();
       const timeoutAt = state.combat.bossDeadlineAt === null
         ? Number.POSITIVE_INFINITY
         : state.combat.bossDeadlineAt + 1;
-      const dueAt = Math.min(
+      const dueGameAt = Math.min(
         state.combat.nextAttackAt,
         state.combat.nextMonsterAttackAt,
         timeoutAt,
       );
+      // 실시간 지연 = 남은 게임 시간 / 배속. 배속 x2면 같은 게임 시간을 절반 실시간에 도달한다.
+      const multiplier = state.speedMultiplier;
+      const delayRealMs = Math.max(0, (dueGameAt - now) / multiplier);
       timerHandle = dependencies.schedule(() => {
         timerHandle = null;
-        const result = advanceCombat(dependencies.now());
+        const result = advanceCombat(syncGameNow());
         if (result.bossTimedOut || result.bossDefeated || result.knockedDown) persist(true);
         else if (result.killed) persist(false);
         scheduleNext();
-      }, Math.max(0, dueAt - now));
+      }, delayRealMs);
     };
 
     return {
@@ -278,7 +327,7 @@ export function createGameStore(
 
       createBoxer: (name, boxerType = DEFAULT_BOXER_TYPE, gender = DEFAULT_GENDER) => {
         clearTimer();
-        const now = dependencies.now();
+        const now = syncGameNow();
         const boxer = createDefaultBoxer(name, boxerType, gender);
         const combat = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, now);
         pausedAt = null;
@@ -300,7 +349,7 @@ export function createGameStore(
         if (!state.boxer || !state.combat) return;
         const result = purchaseUpgrade(state.boxer, key);
         if (!result.purchased) return;
-        const now = dependencies.now();
+        const now = syncGameNow();
         const stats = calculateCombatStats(result.boxer.upgradeLevels, result.boxer.boxerType);
         // 가정: 체력 강화 시 최대 HP가 늘어난 만큼 현재 HP도 가산(풀충전 아님). 현재 HP는 새 최대치 클램프.
         const hpDelta = Math.max(0, stats.maxHp - state.combat.boxerMaxHp);
@@ -323,7 +372,7 @@ export function createGameStore(
       retryBoss: () => {
         const state = get();
         if (!state.boxer || !state.combat || !state.combat.isFarming) return;
-        const now = dependencies.now();
+        const now = syncGameNow();
         const combat = createBossRetry(state.boxer, state.combat, now);
         set({
           combat,
@@ -338,11 +387,12 @@ export function createGameStore(
       pause: () => {
         const state = get();
         if (!state.boxer || !state.combat || !state.isRunning) return;
-        const now = dependencies.now();
-        advanceCombat(now);
+        // 게임 시간으로 진행을 정산하고, 일시정지 시각은 실시간 기준으로 기록한다(오프라인 정산용).
+        const gameTime = syncGameNow();
+        advanceCombat(gameTime);
         clearTimer();
-        pausedAt = now;
-        set({ isRunning: false, bossRemainingMs: getBossRemainingMs(get().combat, now) });
+        pausedAt = dependencies.now();
+        set({ isRunning: false, bossRemainingMs: getBossRemainingMs(get().combat, gameTime) });
         persist(true);
       },
 
@@ -354,18 +404,23 @@ export function createGameStore(
           return;
         }
 
-        const now = dependencies.now();
+        const realNow = dependencies.now();
+        // 정지 동안 흐른 실시간은 배속으로 게임 시간에 누적하지 않는다(오프라인 정산이 별도로 처리).
+        //   lastRealNow를 현재 실시간으로 맞춰 정지 구간을 게임 시간에서 제외한 뒤 gameNow를 읽는다.
+        lastRealNow = realNow;
+        const gameTime = gameNow;
         let boxer = state.boxer;
         let combat = state.combat;
         let offlineSummary = state.offlineSummary;
         if (pausedAt !== null) {
-          const progress = calculateOfflineProgress(boxer, combat.position, Math.max(0, now - pausedAt));
+          // 오프라인(정지) 진행은 실시간 기준(배속 미적용). 게임 시간 가속은 포그라운드 자동 전투에만 적용.
+          const progress = calculateOfflineProgress(boxer, combat.position, Math.max(0, realNow - pausedAt));
           const wasBoss = getStageDefinition(combat.position).isBoss;
           boxer = progress.boxer;
           combat = createCombatRuntime(
             boxer,
             progress.position,
-            now,
+            gameTime,
             combat.isFarming || wasBoss,
           );
           offlineSummary = progress.elapsedMs > 0 ? progress : null;
@@ -378,7 +433,7 @@ export function createGameStore(
           combat,
           offlineSummary,
           isRunning: true,
-          bossRemainingMs: getBossRemainingMs(combat, now),
+          bossRemainingMs: getBossRemainingMs(combat, gameTime),
         });
         if (shouldPersistOffline) {
           persist(true);
@@ -399,6 +454,111 @@ export function createGameStore(
         lastSavedAt = 0;
         shouldPersistOffline = false;
         set({ ...EMPTY_STATE });
+      },
+
+      // TASK-015: AUTO ↔ MANUAL 토글.
+      //  - AUTO→MANUAL: 진행을 게임 시간으로 정산하고 타이머를 멈춘다(이후 입력 액션으로만 진행).
+      //  - MANUAL→AUTO: 게임 시간 기준으로 재예약해 자동 전투를 재개한다.
+      toggleAuto: () => {
+        const state = get();
+        const nextMode: AutoMode = state.autoMode === "AUTO" ? "MANUAL" : "AUTO";
+        if (nextMode === "MANUAL") {
+          const gameTime = syncGameNow();
+          if (state.boxer && state.combat) advanceCombat(gameTime);
+          clearTimer();
+          set({ autoMode: "MANUAL", message: "수동 모드: 화면을 탭해 공격하세요." });
+          return;
+        }
+        // MANUAL→AUTO. 먼저 게임 시간을 정산해 lastRealNow를 현재로 맞춘 뒤 자동 예약한다.
+        syncGameNow();
+        set({ autoMode: "AUTO", message: "자동 전투를 재개합니다." });
+        scheduleNext();
+      },
+
+      // TASK-015: 배속 설정. 전환 시점까지 게임 시간을 정산(누적)한 뒤 배율을 바꾸고 재예약한다.
+      //   게임 시간으로 정산 후 배율을 바꾸므로 이미 진행한 양은 보존되고, 이후 실시간만 배율로 단축된다.
+      setSpeedMultiplier: (multiplier) => {
+        const state = get();
+        if (state.speedMultiplier === multiplier) return;
+        // 현 배율로 여기까지의 게임 시간을 정산한 뒤 배율을 교체한다(전환 직전/직후 게임 시간 연속).
+        syncGameNow();
+        set({ speedMultiplier: multiplier });
+        scheduleNext();
+      },
+
+      // TASK-015: 수동 탭 공격(AUTO OFF 전용). 입력 1회 = 다음 복서 공격 시각까지 게임 시간을 전진시켜
+      //   stepCombat 1회(그 사이 due한 몬스터 공격·보스 타임아웃도 함께 처리). 자동 타이머는 예약하지 않는다.
+      manualAttack: () => {
+        const state = get();
+        if (state.autoMode !== "MANUAL" || !state.boxer || !state.combat) return;
+        const settled = syncGameNow();
+        // 다음 복서 공격 시각으로 게임 시간을 전진(현재 이후라면). 이미 지난 경우 현재 게임 시간 사용.
+        const target = Math.max(settled, state.combat.nextAttackAt);
+        gameNow = target;
+        const result = advanceCombat(target);
+        if (result.bossTimedOut || result.bossDefeated || result.knockedDown) persist(true);
+        else if (result.killed) persist(false);
+      },
+
+      // TASK-015: 수동 스킬(피니시) — AUTO OFF 전용·콤보 게이지 가득일 때만.
+      //   가정/TODO: 스킬 슬롯 시스템(TASK-010)이 아직 없어, equip.md의 Slot1>2>3 우선순위를 구현할 대상이 없다.
+      //   임시로 '콤보 게이지를 소비하는 강타(어퍼 ×FINISHER_DAMAGE_MULT) 1종'으로 한정한다.
+      //   TASK-010 도입 시 슬롯 기반 스킬로 교체한다.
+      triggerSkill: () => {
+        const state = get();
+        const { boxer, combat } = state;
+        if (state.autoMode !== "MANUAL" || !boxer || !combat) return;
+        if (combat.comboGauge < COMBO_GAUGE_MAX) return; // 게이지 부족 시 무동작.
+        const now = syncGameNow();
+        // 보스 타임아웃이 먼저면 스킬 대신 타임아웃을 정산한다(밸런스 게임 시간 기준 유지).
+        if (combat.bossDeadlineAt !== null && now > combat.bossDeadlineAt) {
+          advanceCombat(now);
+          persist(true);
+          return;
+        }
+        const stage = getStageDefinition(combat.position);
+        const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
+        const base = calculateComboAdjustedDamage(stats, "UPPER", null, dependencies.random());
+        // 피니시 배수는 클램프 밖에서 곱하므로 안전 정수 상한으로 다시 클램프한다
+        // (attackPower 상한이 무제한이라 base.damage가 상한 근처면 ×3이 넘칠 수 있음).
+        const damage = Math.min(MAX_SAFE_GAME_INTEGER, Math.floor(base.damage * FINISHER_DAMAGE_MULT));
+        const killed = damage >= combat.monsterHp;
+        const goldReward = killed ? calculateGoldReward(stage.goldReward, stats.goldBonus) : 0;
+        const nextBoxer = killed ? addProgressToBoxer(boxer, 1, goldReward) : boxer;
+
+        let nextCombat: CombatRuntime;
+        const bossDefeated = killed && stage.isBoss;
+        if (!killed) {
+          // 피니시 발동만으로 게이지를 소비한다(처치 못 해도 소비). 진행은 동일 스테이지 유지.
+          nextCombat = { ...combat, monsterHp: Math.max(0, combat.monsterHp - damage), comboGauge: 0 };
+        } else if (combat.isFarming) {
+          nextCombat = createCombatRuntime(nextBoxer, combat.position, now, true);
+        } else {
+          // 일반/보스 처치 모두 다음 스테이지로 전이(보스 처치 시 다음 챕터 1스테이지).
+          nextCombat = createCombatRuntime(nextBoxer, getNextStagePosition(combat.position), now);
+        }
+
+        set({
+          boxer: nextBoxer,
+          combat: nextCombat,
+          lastAttack: {
+            stageId: stage.id,
+            damage,
+            isCritical: base.isCritical,
+            killed,
+            goldReward,
+            attackType: "UPPER",
+            hand: "RIGHT",
+            combo: null,
+          },
+          comboGauge: nextCombat.comboGauge,
+          comboStep: nextCombat.comboStep,
+          message: bossDefeated
+            ? "보스를 쓰러뜨렸습니다! 다음 챕터로 이동합니다."
+            : "피니시!",
+          bossRemainingMs: getBossRemainingMs(nextCombat, now),
+        });
+        persist(killed);
       },
     };
   });

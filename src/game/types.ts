@@ -28,6 +28,13 @@ export type UpgradeLevels = {
 
 export type UpgradeKey = keyof UpgradeLevels;
 
+// TASK-015: 전투 컨트롤 모드(휘발 UI 상태, 저장 안 함).
+//  - AUTO: 현행 자동 전투 타이머.
+//  - MANUAL: 자동 틱 정지 + 입력 액션(수동 탭/수동 스킬)으로만 진행.
+export type AutoMode = "AUTO" | "MANUAL";
+// TASK-015: 전투 배속(게임 시간 가속 배율). 현재 x1/x2만(가정, 확장은 추후).
+export type SpeedMultiplier = 1 | 2;
+
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 
 export type Gender = "MALE" | "FEMALE";
@@ -148,6 +155,11 @@ export type GameState = {
   comboGauge: number;
   comboStep: number;
   lastCombo: ComboId | null;
+  // TASK-015: 전투 컨트롤 상태(비저장, 런타임 전용 UI 상태).
+  //  - autoMode: AUTO=자동 타이머, MANUAL=수동 입력.
+  //  - speedMultiplier: 게임 시간 배속(x1/x2). 보스 타임아웃은 게임 시간 기준이라 밸런스 불변.
+  autoMode: AutoMode;
+  speedMultiplier: SpeedMultiplier;
 };
 
 export type SaveDataV2 = {

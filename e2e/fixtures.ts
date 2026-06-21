@@ -167,6 +167,23 @@ export async function enterBoss(page: Page, options: SeedOptions = {}): Promise<
   await expect(page.getByTestId("combat-badge")).toHaveText("BOSS");
 }
 
+// TASK-015: 전투 컨트롤 testid 헬퍼. SAVE_KEY/SCHEMA_VERSION/BALANCE_VERSION은 불변(컨트롤은 휘발 UI 상태).
+export function autoToggle(page: Page) {
+  return page.getByTestId("auto-toggle");
+}
+
+export function speedToggle(page: Page) {
+  return page.getByTestId("speed-toggle");
+}
+
+export function manualAttackButton(page: Page) {
+  return page.getByTestId("manual-attack");
+}
+
+export function skillButton(page: Page) {
+  return page.getByTestId("skill-button");
+}
+
 export function hpBar(page: Page) {
   return page.getByRole("progressbar");
 }
