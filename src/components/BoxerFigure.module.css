@@ -1,0 +1,127 @@
+/* TASK-018 타입별 6포즈 애니메이션 — 순수 표현 CSS.
+   타입 톤(인파 적/묵직·화면흔들림, 아웃 청/잔상) + 포즈 리치(숏 vs 롱) + boxer_counter 강조.
+   가정/TODO: 아트 미확정 — 이모지/CSS 박스 플레이스홀더로 매핑 구조만 완성한다.
+     스프라이트 시트 vs CSS 애니, 360px WebView 시트 크기·메모리 상한은 성능 측정 후 결정(TODO). */
+
+.figure {
+  --type-accent: #d73c36;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--type-accent) 35%, transparent);
+  border-radius: 20px;
+  background: rgba(23, 28, 40, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 120px;
+  border-radius: 16px;
+  /* 타입 톤: accent 색을 은은한 배경 그라데이션으로. */
+  background: radial-gradient(
+    circle at 50% 70%,
+    color-mix(in srgb, var(--type-accent) 22%, transparent),
+    transparent 70%
+  );
+}
+
+.sprite {
+  font-size: 4rem;
+  line-height: 1;
+  /* 포즈 전환을 부드럽게(키 변경 시 transform 트랜지션). 모션은 transform-origin 하단. */
+  transform-origin: 50% 90%;
+  transition: transform 120ms ease-out, filter 120ms ease-out;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+
+.poseLabel {
+  margin: 0;
+  color: var(--type-accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* === 리치(타입 정체성): 숏=근접(작게·앞으로 덜), 롱=거리(크게·앞으로 더) === */
+.figure[data-reach="SHORT"] .sprite {
+  transform: scale(1) translateX(0);
+}
+.figure[data-reach="LONG"] .sprite {
+  transform: scale(1.08) translateX(6px);
+}
+
+/* === 공격 포즈: 살짝 앞으로 내딛는 느낌. 회피는 뒤로. === */
+.figure[data-animation-key="boxer_left_jab"] .sprite,
+.figure[data-animation-key="boxer_right_straight"] .sprite,
+.figure[data-animation-key="boxer_left_hook"] .sprite,
+.figure[data-animation-key="boxer_right_hook"] .sprite,
+.figure[data-animation-key="boxer_left_upper"] .sprite,
+.figure[data-animation-key="boxer_right_upper"] .sprite {
+  transform: translateX(10px) scale(1.04);
+}
+.figure[data-animation-key="boxer_dodge"] .sprite {
+  transform: translateX(-12px) scale(0.96);
+}
+.figure[data-animation-key="boxer_guard"] .sprite {
+  transform: scale(0.94);
+}
+
+/* === 타입 톤 이펙트 === */
+/* 인파이터(shake): 강한 타격/카운터 시 무거운 화면 흔들림. */
+.figure[data-effect="shake"][data-counter="true"] .stage {
+  animation: figure-shake 240ms ease-in-out;
+}
+/* 아웃복서(afterimage): 회피·카운터 시 잔상. */
+.figure[data-effect="afterimage"][data-animation-key="boxer_dodge"] .sprite,
+.figure[data-effect="afterimage"][data-counter="true"] .sprite {
+  filter: drop-shadow(-8px 0 0 color-mix(in srgb, var(--type-accent) 50%, transparent))
+    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+
+/* === boxer_counter 강조 연출 === */
+.counterBurst {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--type-accent);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--type-accent) 70%, transparent);
+  animation: counter-pop 280ms ease-out;
+}
+
+@keyframes figure-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes counter-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite,
+  .figure[data-effect="shake"][data-counter="true"] .stage,
+  .counterBurst {
+    animation: none;
+    transition: none;
+  }
+}

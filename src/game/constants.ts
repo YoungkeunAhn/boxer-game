@@ -214,6 +214,9 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 //   게임 시간 기준이라 배속이 진행/처치/골드/타임아웃 결과를 바꾸지 않음 → SCHEMA/BALANCE 불변.
 // TASK-017: boxer.type/gender 변경 경로(런타임 타입 전환)만 추가 — 신규 저장 필드·새 밸런스 수식 없음.
 //   기존 calculateCombatStats의 typeMultiplier(BOXER_TYPE_MODIFIERS)를 재적용할 뿐 → SCHEMA/BALANCE 불변.
+// TASK-018: 타입별 6포즈 애니메이션 — 순수 표현 계층(애니 키 도출·포즈 매핑·타입 톤·CSS). 신규 키는
+//   boxer_counter 1개뿐이고 전투 판정·저장 형태·밸런스 수식은 전혀 바뀌지 않음 → SCHEMA(5)/BALANCE(6) 불변.
+//   ANIMATION_HOLD_MS/TYPE_TONE은 표현용 가정값이라 전투 계산에 들어가지 않음(BALANCE 대상 아님).
 export const SCHEMA_VERSION = 5;
 export const BALANCE_VERSION = 6;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
@@ -272,6 +275,26 @@ export const TYPE_SKILLS: Readonly<Record<BoxerType, TypeSkillSet>> = {
     active: ["고스트스텝", "나비 스텝", "팬텀 잽", "거리 조절"],
     passive: "스텝백 카운터",
   },
+};
+
+// === TASK-018 타입별 6포즈 애니메이션(순수 표현 — SCHEMA/BALANCE 무관) ===
+// 가정: 공격·방어 모션을 화면에 보여줄 지속 시간(ms). 시각 기반 모션 홀드 윈도우를 채택할 때만 쓰이며,
+//   전투 계산에는 전혀 들어가지 않으므로 BALANCE_VERSION 대상이 아니다(임시값 — 아트/연출 확정 후 조정).
+//   현재 BoxerFigure는 lastAttack/recentDefense 객체 변경만으로 표시하므로 이 값에 의존하지 않는다(TODO: 시각 홀드 채택 시 사용).
+export const ANIMATION_HOLD_MS = 400;
+
+// 가정: 타입 톤 메타(docs/기획/presentation/ui-tone.md). 인파이터=붉은/묵직·화면흔들림, 아웃복서=청/잔상.
+//   순수 표현용 색·이펙트 식별자라 전투/저장에 영향 없음. accentColor는 CSS 강조색, effect는 연출 분기 키.
+export type TypeTone = {
+  accentColor: string;
+  effect: "shake" | "afterimage";
+};
+
+export const TYPE_TONE: Readonly<Record<BoxerType, TypeTone>> = {
+  // 인파이터: 붉은 압박감·무거운 화면 흔들림(강한 타격/가드 강조).
+  INFIGHTER: { accentColor: "#d73c36", effect: "shake" },
+  // 아웃복서: 푸른 잔상·빠른 스텝(MISS·COUNTER 강조).
+  OUT_BOXER: { accentColor: "#3c7cd7", effect: "afterimage" },
 };
 
 export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers>> = {

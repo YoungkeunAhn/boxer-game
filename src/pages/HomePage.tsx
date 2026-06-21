@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { BoxerFigure } from "../components/BoxerFigure";
 import { CombatControls } from "../components/CombatControls";
 import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
@@ -92,6 +93,8 @@ export function HomePage() {
         {/* TASK-014: 표시 전용 전투 헤더. 헤더와 BoxerStatus/CombatPanel은 일부 정보가 중복되나,
             중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
         <CombatHeader />
+        {/* TASK-018: 타입별 6포즈 애니메이션(표시 전용). boxer/combat null이면 내부에서 null 가드. */}
+        <BoxerFigure />
         <CombatPanel />
         {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
         <CombatControls />
