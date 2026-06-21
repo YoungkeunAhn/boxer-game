@@ -12,9 +12,15 @@ import {
   ATTACK_TYPES,
   BOSS_TIME_LIMIT_MS,
   COMBINATIONS,
+  BOXER_TYPE_MODIFIERS,
   COMBO_GAUGE_MAX,
   COMBO_GAUGE_PER_JAB,
   COUNTER_BASE_DAMAGE_RATE,
+  FULL_COMBO_GROGGY_BONUS,
+  GROGGY_DAMAGE_MULT,
+  GROGGY_DURATION_MS,
+  GROGGY_GAIN_BY_ATTACK,
+  GROGGY_MAX_BASE,
   INFIGHTER_GUARD_COUNTER_RATE,
   KNOCKDOWN_PARTIAL_GOLD_RATE,
   MAX_SAFE_GAME_INTEGER,
@@ -31,16 +37,28 @@ import {
   calculateGuardedDamage,
   calculateMonsterAttackPower,
 } from "./formulas";
+import {
+  applyActiveSkill,
+  applyInternalDamage,
+  collectPassiveModifiers,
+  getActiveBuffModifiers,
+  initSkillCooldowns,
+  selectReadySkill,
+  tickBuffs,
+} from "./skills";
 import type {
   AttackBeat,
   AttackType,
   Boxer,
+  BoxerType,
   CombatRuntime,
   CombatStepResult,
   ComboId,
   Hand,
   MonsterAttackResult,
   OfflineProgress,
+  SkillBuff,
+  SkillId,
   StagePosition,
 } from "./types";
 
@@ -50,9 +68,14 @@ function assertTimestamp(value: number, name: string): void {
   }
 }
 
-// 실효 쿨타임 = 문서 쿨타임 / attackSpeed. attackSpeed가 오를수록 모든 공격이 더 자주 나간다.
-function effectiveCooldownMs(attackType: AttackType, attackSpeed: number): number {
-  return ATTACK_COOLDOWN_MS[attackType] / attackSpeed;
+// 실효 쿨타임 = 문서 쿨타임 / (attackSpeed × (1 + cooldownSpeedup)). attackSpeed가 오를수록,
+//   그리고 cooldownSpeedup 버프(나비스텝 '쿨타임 회복 +20%')가 클수록 모든 공격이 더 자주 나간다.
+function effectiveCooldownMs(
+  attackType: AttackType,
+  attackSpeed: number,
+  cooldownSpeedup = 0,
+): number {
+  return ATTACK_COOLDOWN_MS[attackType] / (attackSpeed * (1 + cooldownSpeedup));
 }
 
 function minReadyAt(nextReadyAt: Record<AttackType, number>): number {
@@ -189,6 +212,16 @@ export function createCombatRuntime(
     attackHistory: [],
     comboGauge: 0,
     comboStep: 0,
+    // v1.3c: 보스 스테이지에서만 그로기를 활성화한다(비보스면 groggyMax=0 → 누적·발동 불가).
+    //   킬·전이·넉다운·보스 타임아웃 시 이 함수로 재생성되며 그로기도 자동 초기화된다.
+    groggyGauge: 0,
+    groggyMax: stage.isBoss ? GROGGY_MAX_BASE : 0,
+    groggyUntil: null,
+    // v1.3d: 스킬 런타임. 액티브 쿨타임을 정책(AFTER_COOLDOWN)대로 now 기준 초기화하고, 버프·내상은 비운다.
+    //   킬·전이·넉다운·보스 타임아웃 시 이 함수로 재생성되며 스킬 상태도 자동 초기화된다.
+    skillCooldowns: initSkillCooldowns(boxer.equippedSkills?.active ?? [], now),
+    activeBuffs: [],
+    internalDoT: null,
     boxerHp: stats.maxHp,
     boxerMaxHp: stats.maxHp,
     nextMonsterAttackAt: now + MONSTER_ATTACK_INTERVAL_MS,
@@ -220,37 +253,61 @@ export function resolveMonsterAttack(
     throw new RangeError("randomValue는 0 이상 1 미만이어야 합니다.");
   }
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
-  const attackPower = calculateMonsterAttackPower(combat.position);
+  // v1.3d: 활성 버프·패시브를 도출한다(만료 버프는 getActiveBuffModifiers가 now로 거른다).
+  const buffMods = getActiveBuffModifiers(combat.activeBuffs, now);
+  const passive = collectPassiveModifiers(boxer);
+  // 거리조절 버프는 몬스터 공격 쿨타임을 늘린다(다음 공격 시각을 더 멀리 잡는다).
+  const monsterInterval = MONSTER_ATTACK_INTERVAL_MS * (1 + buffMods.monsterCooldownDelay);
+  // 압박 버프는 몬스터 공격력을 약화한다.
+  const attackPower = Math.max(
+    1,
+    Math.floor(calculateMonsterAttackPower(combat.position) * (1 - buffMods.monsterAttackWeaken)),
+  );
   const baseCombat = {
     ...combat,
-    nextMonsterAttackAt: now + MONSTER_ATTACK_INTERVAL_MS,
+    activeBuffs: tickBuffs(combat.activeBuffs, now),
+    nextMonsterAttackAt: now + monsterInterval,
   };
 
-  // ① 회피 판정.
-  const dodged = randomValue < stats.dodge;
+  // ① 회피 판정. 나비스텝·거리조절·고스트스텝·팬텀잽 버프가 회피율을 가산한다(CAP 클램프).
+  const effectiveDodge = Math.min(1, Math.max(0, stats.dodge + buffMods.dodgeBonus));
+  const dodged = randomValue < effectiveDodge;
   if (dodged) {
     const isOutBoxer = boxer.boxerType === "OUT_BOXER";
-    const counterDamage = isOutBoxer
-      ? calculateCounterDamage(stats, COUNTER_BASE_DAMAGE_RATE)
+    // 회피 카운터 계수: 아웃복서 기본 카운터 + 나비스텝/고스트스텝 카운터 가산을 stats.counter에 더한다.
+    const buffedStats = { ...stats, counter: stats.counter + buffMods.counterBonus };
+    let counterDamage = isOutBoxer
+      ? calculateCounterDamage(buffedStats, COUNTER_BASE_DAMAGE_RATE)
       : 0;
+    let skillTriggered: SkillId | null = null;
+    // 스텝백카운터(패시브): 회피 성공 시 자동 강한 반격(타입 무관 장착 가능 시). 더 강한 쪽을 쓴다.
+    if (passive.stepBackCounterRate > 0) {
+      const stepBack = calculateCounterDamage(buffedStats, passive.stepBackCounterRate);
+      if (stepBack > counterDamage) {
+        counterDamage = stepBack;
+        skillTriggered = "step_back_counter";
+      }
+    }
     const monsterHp =
       counterDamage > 0 ? Math.max(0, combat.monsterHp - counterDamage) : combat.monsterHp;
     return {
       combat: { ...baseCombat, monsterHp },
       result: {
-        outcome: isOutBoxer ? "COUNTER" : "MISS",
+        outcome: isOutBoxer || counterDamage > 0 ? "COUNTER" : "MISS",
         damage: 0,
         counterDamage,
+        skillTriggered,
       },
       knockedDown: false,
     };
   }
 
-  // ② 가드 적용 피격.
+  // ② 가드 적용 피격. 철벽가드(패시브) 피해감소를 합산 인자로 넘긴다.
   const { damage, guarded } = calculateGuardedDamage(
     attackPower,
     stats.defense,
     boxer.boxerType,
+    passive.guardDamageReduction,
   );
   const boxerHp = Math.max(0, combat.boxerHp - damage);
   const knockedDown = boxerHp <= 0;
@@ -267,6 +324,7 @@ export function resolveMonsterAttack(
       outcome: guarded ? "GUARD" : "HIT",
       damage,
       counterDamage: guardCounter,
+      skillTriggered: passive.guardDamageReduction > 0 ? "iron_guard" : null,
     },
     knockedDown,
   };
@@ -339,6 +397,74 @@ export function retryBoss(
   );
 }
 
+// v1.3c: 보스 그로기 한 타격 처리(순수). 그로기는 보스 스테이지(groggyMax>0)에서만 의미를 가진다.
+//   ① now>=groggyUntil이면 그로기 해제(groggyUntil=null).
+//   ② 그로기 상태(groggyUntil!==null && now<groggyUntil)면 이 타격은 추가 피해를 받고(applyBonus=true) 누적은 하지 않는다.
+//   ③ 비그로기면 이번 공격의 그로기 누적량 = (공격별 기본 + 풀콤보 보너스) × 타입 배율을 게이지에 더한다(정수 내림).
+//      게이지가 groggyMax에 도달하면 그로기 진입(groggyUntil=now+GROGGY_DURATION_MS, 게이지 0 리셋, triggered=true).
+// 반환: 갱신된 그로기 필드와 연출용 플래그. 비보스(groggyMax<=0)면 누적 0·배수 미적용으로 즉시 반환.
+export function resolveGroggy(
+  combat: CombatRuntime,
+  attackType: AttackType,
+  combo: ComboId | null,
+  boxerType: BoxerType,
+  now: number,
+): {
+  groggyGauge: number;
+  groggyUntil: number | null;
+  gain: number;
+  triggered: boolean;
+  bonusApplied: boolean;
+} {
+  // 비보스 스테이지: 그로기 비활성. 누적·배수·발동 모두 없음.
+  if (combat.groggyMax <= 0) {
+    return {
+      groggyGauge: combat.groggyGauge,
+      groggyUntil: null,
+      gain: 0,
+      triggered: false,
+      bonusApplied: false,
+    };
+  }
+
+  // ① 만료 판정. active=false면(미진입이거나 now가 종료 시각 이상) 아래에서 누적을 재개하고 groggyUntil=null로 푼다.
+  const active = combat.groggyUntil !== null && now < combat.groggyUntil;
+
+  // ② 그로기 상태: 이 타격은 추가 피해만 받고 누적하지 않는다.
+  if (active) {
+    return {
+      groggyGauge: combat.groggyGauge,
+      groggyUntil: combat.groggyUntil,
+      gain: 0,
+      triggered: false,
+      bonusApplied: true,
+    };
+  }
+
+  // ③ 비그로기: 누적 후 상한 도달 시 그로기 진입.
+  const base =
+    GROGGY_GAIN_BY_ATTACK[attackType] +
+    (combo === "FULL_COMBO" ? FULL_COMBO_GROGGY_BONUS : 0);
+  const gain = Math.floor(base * BOXER_TYPE_MODIFIERS[boxerType].groggyGainMultiplier);
+  const nextGauge = combat.groggyGauge + gain;
+  if (gain > 0 && nextGauge >= combat.groggyMax) {
+    return {
+      groggyGauge: 0,
+      groggyUntil: now + GROGGY_DURATION_MS,
+      gain,
+      triggered: true,
+      bonusApplied: false,
+    };
+  }
+  return {
+    groggyGauge: Math.min(combat.groggyMax, nextGauge),
+    groggyUntil: null,
+    gain,
+    triggered: false,
+    bonusApplied: false,
+  };
+}
+
 export function resolveAttack(
   boxer: Boxer,
   combat: CombatRuntime,
@@ -360,14 +486,53 @@ export function resolveAttack(
 
   const stage = getStageDefinition(combat.position);
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
+  // v1.3d: 진입부에서 버프 만료를 정리하고 활성 버프 계수를 읽는다(압박 훅/어퍼 증댐 등 기본 타격에 반영).
+  const buffMods = getActiveBuffModifiers(combat.activeBuffs, now);
+  const liveBuffs = tickBuffs(combat.activeBuffs, now);
+  // v1.3d: 내상(리버샷 DoT)을 복서 공격 틱 시점에 정산한다(가정: 정밀 시간 틱은 TODO). monsterHp에 먼저 적용한다.
+  const dotResult = applyInternalDamage(combat.internalDoT, now);
+  const monsterHpAfterDot = Math.max(0, combat.monsterHp - dotResult.damage);
+
   // 이번 틱에 칠 공격(콤보 진행 우선 정책)과 손을 고른다.
   const attackType = selectAttackType(combat.nextReadyAt, now, combat.attackHistory);
   const hand = selectHand(attackType, combat.lastHand);
   // 이번 타격을 history에 더한 뒤 콤비네이션(순서+손) 매칭 → 발동 시 보너스를 데미지/치명타에 반영한다.
   const nextHistory = pushHistory(combat.attackHistory, { attackType, hand });
   const combo = matchCombination(nextHistory);
-  const { damage, isCritical } = calculateComboAdjustedDamage(stats, attackType, combo, randomValue);
-  const killed = damage >= combat.monsterHp;
+  const { damage: rawBaseDamage, isCritical } = calculateComboAdjustedDamage(stats, attackType, combo, randomValue);
+  // v1.3d: 압박 버프는 훅/어퍼 기본 타격에 데미지 증가를 더한다(다른 공격엔 영향 없음).
+  const hookUpperBoosted =
+    (attackType === "HOOK" || attackType === "UPPER") && buffMods.hookUpperDamageBonus > 0
+      ? Math.min(
+          MAX_SAFE_GAME_INTEGER,
+          Math.floor(rawBaseDamage * (1 + buffMods.hookUpperDamageBonus)),
+        )
+      : rawBaseDamage;
+  // v1.3c: 그로기 상태/누적을 먼저 판정한다(보스만 유효). 그로기 상태면 이 타격에 추가 피해 배수를 적용하고,
+  //   비그로기면 이번 공격의 그로기 누적량을 더한다(상한 도달 시 그로기 진입). 비보스면 모두 무효.
+  const groggy = resolveGroggy(combat, attackType, combo, boxer.boxerType, now);
+  // 추가 피해는 그로기 상태에서 친 공격에만 적용한다(정수 클램프). monsterHp 차감·killed 재판정은 이 값으로 한다.
+  const damage = groggy.bonusApplied
+    ? Math.min(MAX_SAFE_GAME_INTEGER, Math.floor(hookUpperBoosted * GROGGY_DAMAGE_MULT))
+    : hookUpperBoosted;
+
+  // v1.3d: 기본 타격 후 액티브 스킬 자동 발동 판정(쿨 종료·슬롯 우선). 발동 시 효과를 모은다.
+  const readySkill = selectReadySkill(
+    boxer.equippedSkills?.active ?? [],
+    combat.skillCooldowns,
+    now,
+  );
+  const skillEffect = readySkill ? applyActiveSkill(readySkill, stats, now) : null;
+  const skillDamage = skillEffect?.monsterDamage ?? 0;
+  // 스킬 그로기 누적을 같은 게이지에 합산한다(보스 한정·비그로기 상태에서만). resolveGroggy가 이미 상태/만료를 판정했다.
+  const skillGroggyGain = skillEffect?.groggyGain ?? 0;
+
+  // 이번 틱 몬스터 총 피해 = 내상 + 기본 타격 + 스킬. killed는 총 피해로 재판정한다.
+  const totalMonsterDamage = Math.min(
+    MAX_SAFE_GAME_INTEGER,
+    dotResult.damage + damage + skillDamage,
+  );
+  const killed = totalMonsterDamage >= combat.monsterHp;
   // 잽은 콤보 게이지를 누적한다(상한 클램프). 잽 외 공격은 게이지를 올리지 않는다.
   const comboGauge =
     attackType === "JAB"
@@ -383,6 +548,39 @@ export function resolveAttack(
   const nextBoxer = killed
     ? addProgressToBoxer(boxer, 1, goldReward)
     : boxer;
+
+  // v1.3d: 스킬 그로기 누적을 base 그로기 결과에 합산한다(보스·비그로기·게이지 누적 중일 때만).
+  //   그로기 상태(bonusApplied)나 진입 직후(triggered)면 스킬 그로기는 합산하지 않는다(상태 일관성).
+  let mergedGroggyGauge = groggy.groggyGauge;
+  let mergedGroggyUntil = groggy.groggyUntil;
+  let mergedGroggyGain = groggy.gain;
+  let mergedGroggyTriggered = groggy.triggered;
+  if (
+    combat.groggyMax > 0 &&
+    skillGroggyGain > 0 &&
+    !groggy.bonusApplied &&
+    !groggy.triggered
+  ) {
+    const withSkill = groggy.groggyGauge + skillGroggyGain;
+    mergedGroggyGain = groggy.gain + skillGroggyGain;
+    if (withSkill >= combat.groggyMax) {
+      mergedGroggyGauge = 0;
+      mergedGroggyUntil = now + GROGGY_DURATION_MS;
+      mergedGroggyTriggered = true;
+    } else {
+      mergedGroggyGauge = Math.min(combat.groggyMax, withSkill);
+    }
+  }
+
+  // v1.3d: 발동 스킬에 따른 런타임 갱신값(쿨타임·버프·내상). 내상은 새로 부여한 DoT가 있으면 그것을, 없으면 정산 후 잔여 DoT.
+  const nextSkillCooldowns =
+    skillEffect && readySkill && skillEffect.cooldownMs !== null
+      ? { ...combat.skillCooldowns, [readySkill]: now + skillEffect.cooldownMs }
+      : combat.skillCooldowns;
+  const nextBuffs: SkillBuff[] = skillEffect?.buff
+    ? [...liveBuffs, skillEffect.buff]
+    : liveBuffs;
+  const nextInternalDoT = skillEffect?.internalDoT ?? dotResult.internalDoT;
 
   let nextCombat: CombatRuntime;
   const timedOutAfterAttack =
@@ -402,11 +600,13 @@ export function resolveAttack(
     // 친 공격만 쿨타임을 갱신하고 직전 손을 기록한다. 다른 공격의 준비 시각은 그대로 둔다.
     const nextReadyAt = {
       ...combat.nextReadyAt,
-      [attackType]: now + effectiveCooldownMs(attackType, stats.attackSpeed),
+      // v1.3d: 친 공격의 다음 준비 시각에 cooldownSpeedup 버프(나비스텝)를 반영해 쿨타임을 단축한다.
+      [attackType]: now + effectiveCooldownMs(attackType, stats.attackSpeed, buffMods.cooldownSpeedup),
     };
     nextCombat = {
       ...combat,
-      monsterHp: Math.max(0, combat.monsterHp - damage),
+      // 내상 + 기본 타격 + 스킬 피해를 합산해 차감한다.
+      monsterHp: Math.max(0, combat.monsterHp - totalMonsterDamage),
       nextReadyAt,
       nextAttackAt: minReadyAt(nextReadyAt),
       lastHand: hand,
@@ -415,6 +615,13 @@ export function resolveAttack(
       attackHistory: nextHistory,
       comboGauge,
       comboStep,
+      // v1.3c+v1.3d: 그로기 게이지·상태를 갱신한다(base 타격 + 스킬 그로기 합산; 비보스면 0/null 유지).
+      groggyGauge: mergedGroggyGauge,
+      groggyUntil: mergedGroggyUntil,
+      // v1.3d: 스킬 런타임(쿨타임·버프·내상)을 갱신한다.
+      skillCooldowns: nextSkillCooldowns,
+      activeBuffs: nextBuffs,
+      internalDoT: nextInternalDoT,
     };
   } else if (combat.isFarming) {
     nextCombat = createCombatRuntime(nextBoxer, combat.position, now, true);
@@ -438,6 +645,14 @@ export function resolveAttack(
       attackType,
       hand,
       combo,
+      groggyGain: mergedGroggyGain,
+      groggyTriggered: mergedGroggyTriggered,
+      groggyBonusApplied: groggy.bonusApplied,
+      // v1.3d 연출용: 이번 틱에 발동한 액티브 스킬·다단 타수·스킬 피해·내상 정산 피해.
+      skillTriggered: readySkill,
+      hits: skillEffect?.hits ?? null,
+      skillDamage,
+      internalDamage: dotResult.damage,
     },
     bossTimedOut: timedOutAfterAttack,
     monsterAttack: null,

@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCombatRuntime } from "../game/combat";
-import { BALANCE_VERSION, INITIAL_UPGRADE_LEVELS, SCHEMA_VERSION } from "../game/constants";
+import {
+  BALANCE_VERSION,
+  DEFAULT_EQUIPPED_SKILLS,
+  INITIAL_UPGRADE_LEVELS,
+  SCHEMA_VERSION,
+} from "../game/constants";
 import type { SaveSnapshot } from "../game/save";
-import type { Boxer, SaveDataV5 } from "../game/types";
+import type { Boxer, SaveDataV6 } from "../game/types";
 import { createGameStore, type GameStoreDependencies } from "./gameStore";
 
 class FakeClock {
@@ -44,14 +49,15 @@ function boxer(overrides: Partial<Boxer> = {}): Boxer {
     gold: 0,
     totalKills: 0,
     upgradeLevels: { ...INITIAL_UPGRADE_LEVELS },
+    equippedSkills: { ...DEFAULT_EQUIPPED_SKILLS.INFIGHTER },
     ...overrides,
   };
 }
 
 function savedData(
   clock: FakeClock,
-  overrides: Partial<SaveDataV5> = {},
-): SaveDataV5 {
+  overrides: Partial<SaveDataV6> = {},
+): SaveDataV6 {
   return {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
@@ -173,6 +179,47 @@ describe("자동 전투 게임 스토어", () => {
     expect(store.getState().comboGauge).toBe(0); // 스트레이트는 게이지를 올리지 않는다.
   });
 
+  it("보스전 그로기 게이지·상태(isGroggy)를 상태로 노출하고 만료 시 isGroggy=false로 갱신한다", () => {
+    const clock = new FakeClock();
+    const inf = boxer();
+    const store = createGameStore(dependencies(clock, { random: () => 0.99 }));
+    const FAR = 100_000_000;
+    const start = createCombatRuntime(inf, { chapter: 1, stage: 5 }, clock.now);
+    // 그로기 상태로 진입시킨 보스 런타임을 직접 심는다(그로기 종료=2_000, 제한시간은 충분히 뒤로).
+    store.setState({
+      boxer: inf,
+      combat: {
+        ...start,
+        monsterHp: FAR,
+        groggyUntil: 2_000,
+        groggyGauge: 50,
+        bossDeadlineAt: FAR,
+        nextReadyAt: { JAB: 1_000, STRAIGHT: FAR, HOOK: FAR, UPPER: FAR },
+        nextAttackAt: 1_000,
+        nextMonsterAttackAt: FAR,
+      },
+      isRunning: false,
+    });
+    store.getState().resume();
+
+    // t=1_000 < 2_000 → 그로기 상태로 노출.
+    clock.advanceTo(1_000);
+    expect(store.getState().groggyMax).toBeGreaterThan(0);
+    expect(store.getState().isGroggy).toBe(true);
+
+    // 그로기 종료 시각 이후 한 틱 더 진행하면 isGroggy=false로 갱신.
+    store.setState({
+      combat: {
+        ...store.getState().combat!,
+        nextReadyAt: { JAB: 3_000, STRAIGHT: FAR, HOOK: FAR, UPPER: FAR },
+        nextAttackAt: 3_000,
+      },
+    });
+    store.getState().resume();
+    clock.advanceTo(3_000);
+    expect(store.getState().isGroggy).toBe(false);
+  });
+
   it("보스 제한 시각과 같은 공격을 먼저 처리해 처치하면 다음 챕터로 이동한다", () => {
     const clock = new FakeClock();
     // 강한 복서: 한 방에 보스를 잡는다. 회피 실패(0.99)여도 14회 가드 피격(8×14=112 < 130)을 버틴다.
@@ -197,7 +244,8 @@ describe("자동 전투 게임 스토어", () => {
     const clock = new FakeClock();
     // 기본 인파이터는 보스(HP 큼)를 못 잡고, 14회 가드 피격(8×14=112 < 130 HP)을 버텨 넉다운 없이
     // 보스 시간초과만 발생한다(random 0.99로 회피 실패 고정).
-    const weakBoxer = boxer();
+    // v1.3d: 전용 스킬을 비워(약체) 스킬 DPS로 보스를 잡지 않게 한다(타임아웃 시나리오 고정).
+    const weakBoxer = boxer({ equippedSkills: { active: [], passive: null } });
     const store = createGameStore(dependencies(clock, { random: () => 0.99 }));
     const combat = createCombatRuntime(weakBoxer, { chapter: 1, stage: 5 }, clock.now);
     store.setState({ boxer: weakBoxer, combat, isRunning: false });
@@ -292,5 +340,76 @@ describe("자동 전투 게임 스토어", () => {
     store.getState().reset();
     expect(store.getState().boxer).toBeNull();
     expect(clock.timers.size).toBe(0);
+  });
+
+  it("createBoxer가 타입별 기본 스킬을 장착한다", () => {
+    const clock = new FakeClock();
+    const inf = createGameStore(dependencies(clock));
+    inf.getState().createBoxer("인파이터", "INFIGHTER");
+    expect(inf.getState().boxer?.equippedSkills).toEqual(DEFAULT_EQUIPPED_SKILLS.INFIGHTER);
+
+    const out = createGameStore(dependencies(new FakeClock()));
+    out.getState().createBoxer("아웃복서", "OUT_BOXER");
+    expect(out.getState().boxer?.equippedSkills).toEqual(DEFAULT_EQUIPPED_SKILLS.OUT_BOXER);
+  });
+
+  it("equipSkill/unequipSkill/equipPassive가 타입 제약·슬롯 수를 지키고 저장한다", () => {
+    const clock = new FakeClock();
+    const save = vi.fn(() => true);
+    const store = createGameStore(dependencies(clock, { save }));
+    store.getState().createBoxer("인파이터", "INFIGHTER");
+    save.mockClear();
+
+    // 슬롯0을 비우고 가젤펀치를 장착(인파이터 스킬, 허용).
+    store.getState().unequipSkill(0);
+    store.getState().equipSkill(0, "gazelle_punch");
+    expect(store.getState().boxer?.equippedSkills.active).toContain("gazelle_punch");
+    expect(save).toHaveBeenCalled();
+
+    // 교차 타입(아웃복서 스킬)은 거부 → 변화 없음.
+    const before = store.getState().boxer?.equippedSkills.active;
+    store.getState().equipSkill(1, "ghost_step");
+    expect(store.getState().boxer?.equippedSkills.active).toEqual(before);
+
+    // 패시브: 액티브 스킬을 패시브 슬롯에 넣으려 하면 거부.
+    store.getState().equipPassive("gazelle_punch");
+    expect(store.getState().boxer?.equippedSkills.passive).toBe("iron_guard");
+    // 패시브 해제.
+    store.getState().equipPassive(null);
+    expect(store.getState().boxer?.equippedSkills.passive).toBeNull();
+  });
+
+  it("전투 중 액티브 스킬 장착 시 combat.skillCooldowns에 키가 생겨 발동 가능해진다", () => {
+    const clock = new FakeClock();
+    const store = createGameStore(dependencies(clock));
+    store.getState().createBoxer("인파이터", "INFIGHTER");
+    // 슬롯0을 비운 뒤 새 액티브 스킬을 장착한다.
+    store.getState().unequipSkill(0);
+    const now = clock.now;
+    store.getState().equipSkill(0, "gazelle_punch");
+    // 장착 전이라면 키가 없어 영영 미발동이지만, 이제 now+cooldownMs 키가 생긴다.
+    const cd = store.getState().combat?.skillCooldowns.gazelle_punch;
+    expect(cd).toBeGreaterThan(now);
+    // 해제하면 쿨타임 키도 함께 사라진다.
+    store.getState().unequipSkill(0);
+    expect(store.getState().combat?.skillCooldowns.gazelle_punch).toBeUndefined();
+  });
+
+  it("전투 중 장착한 스킬 효과가 combat 상태에 반영된다(스텝백카운터 자동 반격)", () => {
+    const clock = new FakeClock();
+    const out = boxer({ boxerType: "OUT_BOXER", equippedSkills: { active: [], passive: "step_back_counter" } });
+    const store = createGameStore(dependencies(clock, { random: () => 0.0 })); // 회피 성공 고정
+    const start = createCombatRuntime(out, { chapter: 1, stage: 1 }, clock.now);
+    const startHp = start.monsterHp;
+    store.setState({
+      boxer: out,
+      combat: { ...start, nextMonsterAttackAt: 100, nextAttackAt: 10_000 },
+      isRunning: false,
+    });
+    store.getState().resume();
+    clock.advanceTo(100);
+    // 스텝백카운터 자동 반격으로 monsterHp가 줄어든다.
+    expect(store.getState().combat!.monsterHp).toBeLessThan(startHp);
+    expect(store.getState().recentDefense?.counterDamage).toBeGreaterThan(0);
   });
 });

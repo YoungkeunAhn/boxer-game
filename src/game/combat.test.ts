@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOXER_TYPE_MODIFIERS,
   COMBO_GAUGE_MAX,
   COMBO_GAUGE_PER_JAB,
+  FULL_COMBO_GROGGY_BONUS,
+  GROGGY_DAMAGE_MULT,
+  GROGGY_DURATION_MS,
+  GROGGY_GAIN_BY_ATTACK,
+  GROGGY_MAX_BASE,
   OFFLINE_MAX_DURATION_MS,
 } from "./constants";
 import {
@@ -11,6 +17,7 @@ import {
   nextComboBeat,
   resolveAttack,
   resolveBossTimeout,
+  resolveGroggy,
   resolveMonsterAttack,
   retryBoss,
   selectAttackType,
@@ -32,6 +39,7 @@ const zeroLevels: UpgradeLevels = {
   counter: 0,
 };
 
+// 기본 테스트 복서는 전용 스킬을 장착하지 않는다(기본 타격만 검증). 스킬 효과는 아래 별도 describe에서 검증한다.
 const boxer: Boxer = {
   id: "player",
   name: "테스트 복서",
@@ -40,6 +48,7 @@ const boxer: Boxer = {
   gold: 0,
   totalKills: 0,
   upgradeLevels: { ...zeroLevels },
+  equippedSkills: { active: [], passive: null },
 };
 
 const outBoxer: Boxer = { ...boxer, boxerType: "OUT_BOXER" };
@@ -409,6 +418,231 @@ describe("콤비네이션·콤보 게이지", () => {
   });
 });
 
+describe("보스 그로기", () => {
+  const NO_CRIT = 0.99;
+  const BOSS_POS = { chapter: 1, stage: 5 } as const;
+  const NORMAL_POS = { chapter: 1, stage: 4 } as const;
+
+  // 보스 런타임에서 특정 공격 1종만 ready로 열고 monsterHp를 크게 둬 처치 없이 그로기만 본다.
+  function bossRuntime(
+    readyType: AttackType,
+    opts: { history?: AttackBeat[]; lastHand?: "LEFT" | "RIGHT" | null; now?: number } = {},
+  ): CombatRuntime {
+    const now = opts.now ?? 1_000;
+    const base = createCombatRuntime(boxer, BOSS_POS, now);
+    const FAR = now + 1_000_000;
+    const nextReadyAt: Record<AttackType, number> = {
+      JAB: FAR,
+      STRAIGHT: FAR,
+      HOOK: FAR,
+      UPPER: FAR,
+    };
+    nextReadyAt[readyType] = now;
+    return {
+      ...base,
+      monsterHp: 100_000_000,
+      bossDeadlineAt: now + 1_000_000, // 그로기 테스트 중 제한시간 만료 방지.
+      attackHistory: opts.history ?? [],
+      lastHand: opts.lastHand ?? null,
+      nextReadyAt,
+      nextAttackAt: now,
+    };
+  }
+
+  const infMult = BOXER_TYPE_MODIFIERS.INFIGHTER.groggyGainMultiplier;
+
+  it("createCombatRuntime: 보스는 그로기 활성(groggyMax>0), 비보스는 비활성(groggyMax=0)", () => {
+    expect(createCombatRuntime(boxer, BOSS_POS, 0).groggyMax).toBe(GROGGY_MAX_BASE);
+    expect(createCombatRuntime(boxer, NORMAL_POS, 0).groggyMax).toBe(0);
+    expect(createCombatRuntime(boxer, BOSS_POS, 0).groggyUntil).toBeNull();
+  });
+
+  it("누적: 보스전 훅·어퍼는 그로기를 누적하고 잽·스트레이트는 0이다", () => {
+    const hook = resolveAttack(boxer, bossRuntime("HOOK"), NO_CRIT, 1_000);
+    expect(hook.attack?.groggyGain).toBe(Math.floor(GROGGY_GAIN_BY_ATTACK.HOOK * infMult));
+    expect(hook.combat.groggyGauge).toBe(Math.floor(GROGGY_GAIN_BY_ATTACK.HOOK * infMult));
+
+    const upper = resolveAttack(boxer, bossRuntime("UPPER"), NO_CRIT, 1_000);
+    expect(upper.attack?.groggyGain).toBe(Math.floor(GROGGY_GAIN_BY_ATTACK.UPPER * infMult));
+
+    const jab = resolveAttack(boxer, bossRuntime("JAB"), NO_CRIT, 1_000);
+    expect(jab.attack?.groggyGain).toBe(0);
+    expect(jab.combat.groggyGauge).toBe(0);
+
+    const straight = resolveAttack(boxer, bossRuntime("STRAIGHT"), NO_CRIT, 1_000);
+    expect(straight.attack?.groggyGain).toBe(0);
+  });
+
+  it("발동: 게이지가 groggyMax에 도달하면 그로기 진입·게이지 0 리셋·groggyTriggered=true", () => {
+    // 어퍼 그로기 35(인파이터). 게이지를 상한 직전에 두고 한 방으로 진입시킨다.
+    const upperGain = Math.floor(GROGGY_GAIN_BY_ATTACK.UPPER * infMult);
+    const combat: CombatRuntime = {
+      ...bossRuntime("UPPER"),
+      groggyGauge: GROGGY_MAX_BASE - 1,
+    };
+    const step = resolveAttack(boxer, combat, NO_CRIT, 1_000);
+    expect(upperGain).toBeGreaterThan(0);
+    expect(step.attack?.groggyTriggered).toBe(true);
+    expect(step.combat.groggyGauge).toBe(0);
+    expect(step.combat.groggyUntil).toBe(1_000 + GROGGY_DURATION_MS);
+  });
+
+  it("만료: groggyUntil 경과 후 다음 공격에서 그로기 해제·누적 재개", () => {
+    const enterAt = 1_000;
+    const combat: CombatRuntime = {
+      ...bossRuntime("HOOK", { now: enterAt }),
+      groggyUntil: enterAt + GROGGY_DURATION_MS,
+      groggyGauge: 0,
+    };
+    // 만료 시각 이후 훅 → 추가 피해 없이 누적 재개, groggyUntil=null.
+    const afterAt = enterAt + GROGGY_DURATION_MS;
+    const next: CombatRuntime = {
+      ...combat,
+      nextReadyAt: { ...combat.nextReadyAt, HOOK: afterAt },
+      nextAttackAt: afterAt,
+    };
+    const step = resolveAttack(boxer, next, NO_CRIT, afterAt);
+    expect(step.attack?.groggyBonusApplied).toBe(false);
+    expect(step.combat.groggyUntil).toBeNull();
+    expect(step.combat.groggyGauge).toBe(Math.floor(GROGGY_GAIN_BY_ATTACK.HOOK * infMult));
+  });
+
+  it("그로기 중 추가 피해: 그로기 상태 공격은 비그로기 대비 GROGGY_DAMAGE_MULT배 피해·groggyBonusApplied", () => {
+    const at = 1_000;
+    // 비그로기 어퍼(기본 30) vs 그로기 어퍼(30×1.5=45).
+    const baseHp = 100_000_000;
+    const normal = resolveAttack(boxer, bossRuntime("UPPER", { now: at }), NO_CRIT, at);
+    expect(normal.attack?.groggyBonusApplied).toBe(false);
+    const normalDamage = baseHp - normal.combat.monsterHp;
+
+    const groggyCombat: CombatRuntime = {
+      ...bossRuntime("UPPER", { now: at }),
+      groggyUntil: at + GROGGY_DURATION_MS,
+    };
+    const groggy = resolveAttack(boxer, groggyCombat, NO_CRIT, at);
+    expect(groggy.attack?.groggyBonusApplied).toBe(true);
+    const groggyDamage = baseHp - groggy.combat.monsterHp;
+    expect(groggyDamage).toBe(Math.floor(normalDamage * GROGGY_DAMAGE_MULT));
+    // 그로기 중에는 누적하지 않는다.
+    expect(groggy.attack?.groggyGain).toBe(0);
+  });
+
+  it("그로기 중 추가 피해로 killed 재판정이 일어난다(보상·전이 포함)", () => {
+    const at = 1_000;
+    // 기본 어퍼 30. monsterHp=40이면 비그로기는 미처치, 그로기(45)면 처치.
+    const combat: CombatRuntime = {
+      ...bossRuntime("UPPER", { now: at }),
+      monsterHp: 40,
+      groggyUntil: at + GROGGY_DURATION_MS,
+    };
+    const step = resolveAttack(boxer, combat, NO_CRIT, at);
+    expect(step.attack?.groggyBonusApplied).toBe(true);
+    expect(step.attack?.killed).toBe(true);
+    expect(step.attack?.goldReward).toBeGreaterThan(0);
+    // 보스 처치 → 다음 챕터 1스테이지로 전이, 새 런타임의 그로기 초기화.
+    expect(step.combat.position).toEqual({ chapter: 2, stage: 1 });
+    expect(step.combat.groggyGauge).toBe(0);
+    expect(step.combat.groggyUntil).toBeNull();
+  });
+
+  it("비보스 비활성: 일반 스테이지는 훅/어퍼를 쳐도 누적 0·groggyMax 0·발동/추가 피해 없음", () => {
+    const now = 1_000;
+    const base = createCombatRuntime(boxer, NORMAL_POS, now, true);
+    const FAR = now + 1_000_000;
+    const combat: CombatRuntime = {
+      ...base,
+      monsterHp: 100_000_000,
+      nextReadyAt: { JAB: FAR, STRAIGHT: FAR, HOOK: now, UPPER: FAR },
+      nextAttackAt: now,
+    };
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.attackType).toBe("HOOK");
+    expect(step.attack?.groggyGain).toBe(0);
+    expect(step.attack?.groggyTriggered).toBe(false);
+    expect(step.attack?.groggyBonusApplied).toBe(false);
+    expect(step.combat.groggyGauge).toBe(0);
+    expect(step.combat.groggyMax).toBe(0);
+    expect(step.combat.groggyUntil).toBeNull();
+  });
+
+  it("제한시간 우선: 그로기 상태여도 제한 시각 만료 시 파밍으로 전이하고 그로기를 초기화한다", () => {
+    const deadline = 30_000;
+    const combat: CombatRuntime = {
+      ...bossRuntime("UPPER", { now: 0 }),
+      bossDeadlineAt: deadline,
+      groggyUntil: deadline + 5_000, // 그로기 상태로 두지만 제한시간이 우선해야 한다.
+      groggyGauge: 50,
+      nextReadyAt: { JAB: 1e9, STRAIGHT: 1e9, HOOK: 1e9, UPPER: deadline + 1 },
+      nextAttackAt: deadline + 1,
+    };
+    // resolveBossTimeout(초입)이 우선해 공격 없이 전이.
+    const step = resolveAttack(boxer, combat, NO_CRIT, deadline + 1);
+    expect(step.bossTimedOut).toBe(true);
+    expect(step.attack).toBeNull();
+    expect(step.combat.position).toEqual({ chapter: 1, stage: 4 });
+    expect(step.combat.groggyGauge).toBe(0);
+    expect(step.combat.groggyUntil).toBeNull();
+    expect(step.combat.groggyMax).toBe(0);
+  });
+
+  it("타입별 경향: 인파이터가 아웃복서보다 적은 훅 타격으로 그로기를 발동한다", () => {
+    function hooksToGroggy(b: Boxer): number {
+      const now0 = 1_000;
+      const base = createCombatRuntime(b, BOSS_POS, now0);
+      let combat: CombatRuntime = {
+        ...base,
+        monsterHp: 100_000_000,
+        bossDeadlineAt: now0 + 1_000_000,
+      };
+      let t = now0;
+      let hits = 0;
+      for (let i = 0; i < 100; i += 1) {
+        t += 1;
+        combat = {
+          ...combat,
+          nextReadyAt: { JAB: 1e12, STRAIGHT: 1e12, HOOK: t, UPPER: 1e12 },
+          nextAttackAt: t,
+        };
+        const step = resolveAttack(b, combat, NO_CRIT, t);
+        combat = step.combat;
+        hits += 1;
+        if (step.attack?.groggyTriggered) return hits;
+      }
+      throw new Error("그로기 미발동");
+    }
+    expect(hooksToGroggy(boxer)).toBeLessThan(hooksToGroggy(outBoxer));
+  });
+
+  it("풀콤보 그로기 보너스: 풀콤보 마무리 어퍼는 UPPER 기본 + FULL_COMBO_GROGGY_BONUS만큼 누적한다", () => {
+    const now = 1_000;
+    // 풀콤보 prefix(JAB→STRAIGHT→HOOK)를 심고 어퍼만 ready로 열어 풀콤보 마무리.
+    const history: AttackBeat[] = [
+      { attackType: "JAB", hand: "LEFT" },
+      { attackType: "STRAIGHT", hand: "RIGHT" },
+      { attackType: "HOOK", hand: "LEFT" },
+    ];
+    const combat = bossRuntime("UPPER", { history, lastHand: "LEFT", now });
+    const step = resolveAttack(boxer, combat, NO_CRIT, now);
+    expect(step.attack?.combo).toBe("FULL_COMBO");
+    const expected = Math.floor(
+      (GROGGY_GAIN_BY_ATTACK.UPPER + FULL_COMBO_GROGGY_BONUS) * infMult,
+    );
+    expect(step.attack?.groggyGain).toBe(expected);
+  });
+
+  it("resolveGroggy 순수 함수: 비보스(groggyMax=0)면 누적·발동·추가 피해 모두 없음", () => {
+    const combat: CombatRuntime = { ...createCombatRuntime(boxer, NORMAL_POS, 0), groggyMax: 0 };
+    const r = resolveGroggy(combat, "HOOK", null, "INFIGHTER", 0);
+    expect(r).toEqual({
+      groggyGauge: 0,
+      groggyUntil: null,
+      gain: 0,
+      triggered: false,
+      bonusApplied: false,
+    });
+  });
+});
+
 describe("몬스터 공격·회피·가드·카운터", () => {
   // 인파이터 dodge = 0.05×0.6 = 0.03. 아웃복서 dodge = 0.05×1.6 = 0.08.
   it("회피 실패(random ≥ dodge) 시 인파이터는 가드 적용 피해로 HP가 줄고 GUARD로 분류된다", () => {
@@ -516,5 +750,161 @@ describe("오프라인 정산", () => {
       OFFLINE_MAX_DURATION_MS * 2,
     );
     expect(capped.elapsedMs).toBe(OFFLINE_MAX_DURATION_MS);
+  });
+});
+
+describe("전용 스킬 전투 연결 (v1.3d)", () => {
+  // 스킬을 장착한 복서. monsterHp가 큰 스테이지를 골라 한 틱에 죽지 않게 한다.
+  const skilled = (active: Boxer["equippedSkills"]["active"], passive: Boxer["equippedSkills"]["passive"] = null): Boxer => ({
+    ...boxer,
+    equippedSkills: { active, passive },
+  });
+
+  it("createCombatRuntime이 스킬 런타임 필드를 초기화한다", () => {
+    const combat = createCombatRuntime(skilled(["liver_shot"]), { chapter: 2, stage: 5 }, 0);
+    expect(combat.activeBuffs).toEqual([]);
+    expect(combat.internalDoT).toBeNull();
+    // 액티브 쿨타임이 cooldownMs 후로 초기화된다(AFTER_COOLDOWN).
+    expect(combat.skillCooldowns.liver_shot).toBeGreaterThan(0);
+  });
+
+  it("미장착 스킬은 발동하지 않는다", () => {
+    const combat = createCombatRuntime(boxer, { chapter: 3, stage: 4 }, 0);
+    const r = resolveAttack(boxer, combat, 0.99, 20_000);
+    expect(r.attack?.skillTriggered).toBeNull();
+    expect(r.attack?.skillDamage).toBe(0);
+  });
+
+  it("리버샷이 단일 피해와 내상 DoT를 부여하고, 내상이 시간 경과로 monsterHp를 누적 차감한다", () => {
+    const b = skilled(["liver_shot"]);
+    // 큰 HP 스테이지(보스 아님)에서 진행. 쿨이 도래하도록 충분히 뒤 시점에서 친다.
+    const combat = createCombatRuntime(b, { chapter: 5, stage: 4 }, 0);
+    const fireAt = combat.skillCooldowns.liver_shot!;
+    const r1 = resolveAttack(b, combat, 0.99, fireAt);
+    expect(r1.attack?.skillTriggered).toBe("liver_shot");
+    expect(r1.attack?.skillDamage).toBeGreaterThan(0);
+    expect(r1.combat.internalDoT).not.toBeNull();
+    const hpAfterCast = r1.combat.monsterHp;
+    // 1초 뒤 다음 복서 공격 틱에 내상 1틱이 정산된다(추가 피해).
+    const r2 = resolveAttack(r1.boxer, r1.combat, 0.99, fireAt + 1_000);
+    expect(r2.attack?.internalDamage).toBeGreaterThan(0);
+    // 내상 + 기본 타격으로 hp가 더 줄어든다.
+    expect(r2.combat.monsterHp).toBeLessThan(hpAfterCast);
+  });
+
+  it("스킬 쿨타임을 준수해 연속 발동하지 않는다", () => {
+    const b = skilled(["liver_shot"]);
+    const combat = createCombatRuntime(b, { chapter: 5, stage: 4 }, 0);
+    const fireAt = combat.skillCooldowns.liver_shot!;
+    const r1 = resolveAttack(b, combat, 0.99, fireAt);
+    expect(r1.attack?.skillTriggered).toBe("liver_shot");
+    // 바로 다음 틱(쿨 도래 전)에는 발동하지 않는다.
+    const r2 = resolveAttack(r1.boxer, r1.combat, 0.99, fireAt + 100);
+    expect(r2.attack?.skillTriggered).toBeNull();
+  });
+
+  it("뎀프시롤 다단 타격이 monsterHp를 타수만큼 차감하고 그로기를 누적한다(보스)", () => {
+    const b = skilled(["dempsey_roll"]);
+    const combat = createCombatRuntime(b, { chapter: 1, stage: 5 }, 0);
+    const fireAt = combat.skillCooldowns.dempsey_roll!;
+    const r = resolveAttack(b, combat, 0.99, fireAt);
+    expect(r.attack?.skillTriggered).toBe("dempsey_roll");
+    expect(r.attack?.hits).toBeGreaterThan(1);
+    expect(r.attack?.skillDamage).toBeGreaterThan(0);
+    // 보스라 그로기 게이지가 스킬 그로기만큼(+ 기본 타격) 누적된다.
+    expect(r.combat.groggyGauge).toBeGreaterThan(0);
+  });
+
+  it("철벽가드(패시브)가 피격 피해를 감소시킨다", () => {
+    const guarded = skilled([], "iron_guard");
+    const plain = skilled([], null);
+    const cg = createCombatRuntime(guarded, { chapter: 1, stage: 1 }, 0);
+    const cp = createCombatRuntime(plain, { chapter: 1, stage: 1 }, 0);
+    // 회피 실패(0.99)로 피격을 고정한다.
+    const rg = resolveMonsterAttack(guarded, cg, 0.99, 2_000);
+    const rp = resolveMonsterAttack(plain, cp, 0.99, 2_000);
+    expect(rg.result.damage).toBeLessThan(rp.result.damage);
+    expect(rg.result.skillTriggered).toBe("iron_guard");
+  });
+
+  it("나비스텝 버프가 회피율을 올려 MISS를 만든다", () => {
+    // 아웃복서 기본 회피 0.08. randomValue 0.15면 평소 피격이지만, 나비스텝(+0.15)으로 회피한다.
+    const b: Boxer = { ...outBoxer, equippedSkills: { active: [], passive: null } };
+    const base = createCombatRuntime(b, { chapter: 1, stage: 1 }, 0);
+    const noBuff = resolveMonsterAttack(b, base, 0.15, 2_000);
+    expect(noBuff.result.outcome).not.toBe("MISS");
+    // 나비스텝 버프를 수동 부여.
+    const withBuff: CombatRuntime = {
+      ...base,
+      activeBuffs: [{
+        sourceSkill: "navi_step",
+        until: 10_000,
+        dodgeBonus: 0.15,
+        counterBonus: 0.1,
+        cooldownSpeedup: 0.2,
+        monsterAttackWeaken: 0,
+        monsterCooldownDelay: 0,
+        hookUpperDamageBonus: 0,
+      }],
+    };
+    const buffed = resolveMonsterAttack(b, withBuff, 0.15, 2_000);
+    // 아웃복서는 회피 시 COUNTER. 어쨌든 피격(HIT/GUARD)이 아니다.
+    expect(buffed.result.damage).toBe(0);
+  });
+
+  it("스텝백카운터(패시브)가 회피 성공 시 자동 반격으로 monsterHp를 깎는다", () => {
+    const b: Boxer = { ...outBoxer, equippedSkills: { active: [], passive: "step_back_counter" } };
+    const combat = createCombatRuntime(b, { chapter: 1, stage: 1 }, 0);
+    // 회피 성공(0.0).
+    const r = resolveMonsterAttack(b, combat, 0.0, 2_000);
+    expect(r.result.counterDamage).toBeGreaterThan(0);
+    expect(r.combat.monsterHp).toBeLessThan(combat.monsterHp);
+  });
+
+  it("나비스텝 cooldownSpeedup 버프가 기본 공격 쿨타임을 단축한다", () => {
+    // 큰 HP·비보스 스테이지에서 한 틱 친 뒤, 친 공격의 다음 준비 시각을 버프 유무로 비교한다.
+    const b: Boxer = { ...outBoxer, equippedSkills: { active: [], passive: null } };
+    const base = createCombatRuntime(b, { chapter: 5, stage: 4 }, 0);
+    const now = base.nextAttackAt;
+    const plain = resolveAttack(b, base, 0.99, now);
+    const withBuff: CombatRuntime = {
+      ...base,
+      activeBuffs: [{
+        sourceSkill: "navi_step",
+        until: 1_000_000,
+        dodgeBonus: 0,
+        counterBonus: 0,
+        cooldownSpeedup: 0.2,
+        monsterAttackWeaken: 0,
+        monsterCooldownDelay: 0,
+        hookUpperDamageBonus: 0,
+      }],
+    };
+    const buffed = resolveAttack(b, withBuff, 0.99, now);
+    // 같은 공격이 선택되고, 버프가 있으면 그 공격의 다음 준비 시각이 더 가깝다(쿨 단축).
+    const type = plain.attack!.attackType;
+    expect(buffed.attack!.attackType).toBe(type);
+    expect(buffed.combat.nextReadyAt[type] - now).toBeLessThan(plain.combat.nextReadyAt[type] - now);
+  });
+
+  it("거리조절 버프가 몬스터 공격 간격을 늘린다", () => {
+    const b: Boxer = { ...outBoxer, equippedSkills: { active: [], passive: null } };
+    const base = createCombatRuntime(b, { chapter: 1, stage: 1 }, 0);
+    const withBuff: CombatRuntime = {
+      ...base,
+      activeBuffs: [{
+        sourceSkill: "distance_control",
+        until: 100_000,
+        dodgeBonus: 0.1,
+        counterBonus: 0,
+        cooldownSpeedup: 0,
+        monsterAttackWeaken: 0,
+        monsterCooldownDelay: 0.2,
+        hookUpperDamageBonus: 0,
+      }],
+    };
+    const plain = resolveMonsterAttack(b, base, 0.99, 2_000);
+    const delayed = resolveMonsterAttack(b, withBuff, 0.99, 2_000);
+    expect(delayed.combat.nextMonsterAttackAt).toBeGreaterThan(plain.combat.nextMonsterAttackAt);
   });
 });

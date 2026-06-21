@@ -48,6 +48,7 @@ const boxer: Boxer = {
   gold: 100,
   totalKills: 0,
   upgradeLevels: zeroLevels,
+  equippedSkills: { active: [], passive: null },
 };
 
 describe("자동 전투 수식", () => {
