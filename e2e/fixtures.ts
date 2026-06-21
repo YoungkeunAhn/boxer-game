@@ -5,11 +5,12 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v5";
+export const SAVE_KEY = "boxer-game.save.v6";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-export const SCHEMA_VERSION = 5;
-export const BALANCE_VERSION = 6;
+// TASK-019(P3): 재화·플레이어 레벨 도입 → SCHEMA 5→6, BALANCE 6→7.
+export const SCHEMA_VERSION = 6;
+export const BALANCE_VERSION = 7;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";
@@ -37,6 +38,10 @@ export type SeedOptions = {
   isFarming?: boolean;
   savedAtMs?: number;
   upgradeLevels?: Partial<Record<UpgradeKey, number>>;
+  // TASK-019(P3): 재화·플레이어 진행 시드(기본값: diamond 0·playerLevel 1·playerExp 0).
+  diamond?: number;
+  playerLevel?: number;
+  playerExp?: number;
 };
 
 const ZERO_LEVELS: Record<UpgradeKey, number> = {
@@ -51,7 +56,7 @@ const ZERO_LEVELS: Record<UpgradeKey, number> = {
   counter: 0,
 };
 
-// save.ts의 isSaveData를 통과하는 v3 저장 JSON을 만든다.
+// save.ts의 isSaveData를 통과하는 v6 저장 JSON을 만든다.
 export function buildSaveJson(options: SeedOptions = {}): string {
   const {
     name = "테스트복서",
@@ -64,6 +69,9 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     isFarming = false,
     savedAtMs = CLOCK_TIME_MS,
     upgradeLevels = {},
+    diamond = 0,
+    playerLevel = 1,
+    playerExp = 0,
   } = options;
 
   return JSON.stringify({
@@ -78,6 +86,10 @@ export function buildSaveJson(options: SeedOptions = {}): string {
       gold,
       totalKills,
       upgradeLevels: { ...ZERO_LEVELS, ...upgradeLevels },
+      // TASK-019(P3): 신규 저장 필드(없으면 isBoxer 타입가드 실패 → 로드 시 invalid).
+      diamond,
+      playerLevel,
+      playerExp,
     },
     position: { chapter, stage },
     isFarming,

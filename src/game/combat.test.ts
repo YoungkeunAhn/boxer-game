@@ -41,6 +41,9 @@ const boxer: Boxer = {
   gold: 0,
   totalKills: 0,
   upgradeLevels: { ...zeroLevels },
+  diamond: 0,
+  playerLevel: 1,
+  playerExp: 0,
 };
 
 const outBoxer: Boxer = { ...boxer, boxerType: "OUT_BOXER" };
@@ -496,6 +499,14 @@ describe("오프라인 정산", () => {
       gold: 15,
     });
     expect(boxer).toMatchObject({ totalKills: 0, gold: 0 });
+  });
+
+  it("오프라인 처치도 온라인과 동일하게 경험치를 부여한다(킬당 EXP_PER_KILL)", () => {
+    const progress = calculateOfflineProgress(boxer, { chapter: 1, stage: 1 }, 10_000);
+    // 10초 = 3킬, EXP_PER_KILL=1 → 경험치 3. 임계(62) 미만이라 레벨업 없음.
+    expect(progress.kills).toBe(3);
+    expect(progress.boxer.playerExp).toBe(boxer.playerExp + 3);
+    expect(progress.boxer.playerLevel).toBe(boxer.playerLevel);
   });
 
   it("회피·카운터는 오프라인 수익에 영향을 주지 않는다(타입 무관 동일 정산)", () => {

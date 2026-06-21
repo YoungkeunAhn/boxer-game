@@ -217,8 +217,15 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 // TASK-018: 타입별 6포즈 애니메이션 — 순수 표현 계층(애니 키 도출·포즈 매핑·타입 톤·CSS). 신규 키는
 //   boxer_counter 1개뿐이고 전투 판정·저장 형태·밸런스 수식은 전혀 바뀌지 않음 → SCHEMA(5)/BALANCE(6) 불변.
 //   ANIMATION_HOLD_MS/TYPE_TONE은 표현용 가정값이라 전투 계산에 들어가지 않음(BALANCE 대상 아님).
-export const SCHEMA_VERSION = 5;
-export const BALANCE_VERSION = 6;
+// TASK-019(P3 재화·플레이어 레벨): Boxer에 diamond/playerLevel/playerExp 저장 필드 추가 → 저장 형태 변경
+//   → SCHEMA 5→6, SAVE_KEY를 boxer-game.save.v6으로 맞춘다(옛 v5는 LEGACY_SAVE_KEYS로 안내, 삭제 안 함).
+//   주의: 기획 문서(TASK-019/README/01-공통-레이아웃)는 'v6→v7'로 적혀 있으나 이는 P2가 v6을 쓴다는 전제였고,
+//   P2(TASK-014~018)는 저장 무변경으로 코드 실제 버전이 v5에 머물렀다. 따라서 실제 범프는 v5→v6이며
+//   문서 표기를 코드 정합에 맞춰 정정한다.
+//   BALANCE 6→7: 경험치 곡선 expToNext(BASE×GROWTH^level)·획득원·레벨업 보상이라는 신규 밸런스 수식 도입
+//   (다이아 자체는 순수 재화라 수식이 아니나 경험치/레벨업이 진행 밸런스에 들어가므로 BALANCE도 올린다 — 가정).
+export const SCHEMA_VERSION = 6;
+export const BALANCE_VERSION = 7;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export const BOXER_TYPES = ["INFIGHTER", "OUT_BOXER"] as const satisfies readonly BoxerType[];
@@ -296,6 +303,35 @@ export const TYPE_TONE: Readonly<Record<BoxerType, TypeTone>> = {
   // 아웃복서: 푸른 잔상·빠른 스텝(MISS·COUNTER 강조).
   OUT_BOXER: { accentColor: "#3c7cd7", effect: "afterimage" },
 };
+
+// === TASK-019 P3 재화·플레이어 레벨/경험치 (BALANCE 6→7) ===
+// 신규 boxer 초기값. 새 게임·복서 생성 시 적용한다.
+export const INITIAL_DIAMOND = 0;
+// 가정: 플레이어 레벨은 1부터 시작(전투 강화 레벨과 별개). 경험치는 0에서 누적.
+export const INITIAL_PLAYER_LEVEL = 1;
+export const INITIAL_PLAYER_EXP = 0;
+
+// 플레이어 경험치 곡선(가정값 — TASK-013/TASK-021 밸런스 확정 시 갱신).
+//   expToNext(level) = floor(PLAYER_EXP_BASE × PLAYER_EXP_GROWTH^level).
+//   기존 강화 비용 곡선(1.25^level)과 톤을 맞춘다(formulas.ts: calculateUpgradeCost 참고).
+export const PLAYER_EXP_BASE = 50; // 가정: Lv1→2에 필요한 기준 경험치.
+export const PLAYER_EXP_GROWTH = 1.25; // 가정: 기존 강화 비용 곡선과 동일 성장률.
+
+// 경험치 획득원(가정/TODO — 실제 수치는 밸런스 확정 전 임시값).
+export const EXP_PER_KILL = 1; // 가정: 일반 몬스터 처치 1회당 경험치.
+export const EXP_PER_BOSS_CLEAR = 20; // 가정: 보스 클리어 1회당 경험치.
+// TODO(TASK-021): 퀘스트 완료 보상 경험치. 퀘스트 시스템 도입 시 연결.
+export const EXP_PER_QUEST = 0;
+
+// 레벨업 보상(가정/TODO — 밸런스 확정 전 미정). 레벨 1회 상승당 지급 다이아.
+//   가정: 진행 동기 부여용 소량(임시 2). 미확정이면 0으로 둬도 무방하나, 다이아 sink가 아직 없어
+//   값을 0이 아닌 임시값으로 둬 경험치→레벨업→다이아 파생 경로를 테스트로 검증할 수 있게 한다.
+export const LEVEL_UP_DIAMOND_REWARD = 2;
+
+// 일일 콘텐츠 리셋 기준 시각(로컬 시간 0시 = 자정). 다음 로컬 00:00까지 남은 시간을 표시 타이머로 쓴다.
+//   가정: WebView(앱인토스) 실행 환경의 로컬 타임존 기준. UTC 고정 여부는 TASK-021 일일 리셋과 동일 기준으로 맞춘다.
+//   순수 함수(progress.ts: nextDailyResetAt)가 주입 now로부터 Date를 만들어 계산하며 Date.now는 직접 호출하지 않는다.
+export const DAILY_RESET_HOUR = 0;
 
 export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers>> = {
   INFIGHTER: {
