@@ -10,9 +10,12 @@ import {
 
 // docs/browser-smoke-checklist.md - 강화
 test.describe("강화", () => {
-  test("다섯 강화에 현재 값·레벨·다음 값·비용이 표시된다", async ({ page }) => {
+  test("공격 탭의 다섯 강화에 현재 값·레벨·다음 값·비용이 표시된다", async ({ page }) => {
     await gotoFrozen(page);
     await createBoxer(page);
+
+    // 기본 활성 그룹은 공격 계열.
+    await expect(page.getByTestId("upgrade-tab-attack")).toHaveAttribute("aria-selected", "true");
 
     for (const key of [
       "attackPower",
@@ -26,6 +29,47 @@ test.describe("강화", () => {
       await expect(row.getByText("Lv.")).toBeVisible();
       await expect(upgradeButton(page, key)).toBeVisible();
     }
+  });
+
+  test("방어 탭을 누르면 방어 4종이 노출되고 골드 충분 시 레벨이 1 오른다", async ({ page }) => {
+    await seedSave(page, { gold: 100000 });
+    await gotoFrozen(page);
+
+    const defenseKeys = ["maxHp", "defense", "dodge", "counter"] as const;
+
+    // 기본(공격 탭)에서는 방어 행이 숨겨져 있다.
+    for (const key of defenseKeys) {
+      await expect(page.getByTestId(`upgrade-row-${key}`)).toBeHidden();
+    }
+
+    await page.getByTestId("upgrade-tab-defense").click();
+    await expect(page.getByTestId("upgrade-tab-defense")).toHaveAttribute("aria-selected", "true");
+
+    for (const key of defenseKeys) {
+      const row = page.getByTestId(`upgrade-row-${key}`);
+      await expect(row).toBeVisible();
+      await expect(row.getByText("Lv. 0")).toBeVisible();
+      const button = upgradeButton(page, key);
+      await expect(button).toBeVisible();
+      await expect(button).toBeEnabled();
+      await button.click();
+      await expect(row.getByText("Lv. 1")).toBeVisible();
+    }
+  });
+
+  test("각 칸에 다음 레벨 증가량(+표시)이 보이고 MAX에서는 증가량이 사라진다", async ({ page }) => {
+    await seedSave(page, {
+      gold: 1000,
+      upgradeLevels: { attackSpeed: 40 }, // 상한(5.0회/초) 도달
+    });
+    await gotoFrozen(page);
+
+    // 공격력은 상한이 없어 다음 레벨 증가량이 +표시로 보인다.
+    await expect(page.getByTestId("upgrade-delta-attackPower")).toContainText("+");
+
+    // 상한(MAX)인 공격속도는 증가량 표기가 없고 버튼이 MAX다.
+    await expect(page.getByTestId("upgrade-delta-attackSpeed")).toHaveCount(0);
+    await expect(upgradeButton(page, "attackSpeed")).toHaveText("MAX");
   });
 
   test("공격력 0레벨 비용은 10골드, 강화 후 피해가 floor(10×1.2)=12로 오른다", async ({
