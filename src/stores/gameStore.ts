@@ -344,12 +344,14 @@ export function createGameStore(
         const result = purchaseUpgrade(state.boxer, key);
         if (!result.purchased) return;
         const now = dependencies.now();
+        // 강화 전/후 공격 속도를 둘 다 구한다(진척 보존 재스케줄에 필요).
+        const prevStats = calculateCombatStats(state.boxer.upgradeLevels, state.boxer.boxerType);
         const stats = calculateCombatStats(result.boxer.upgradeLevels, result.boxer.boxerType);
         // 가정: 체력 강화 시 최대 HP가 늘어난 만큼 현재 HP도 가산(풀충전 아님). 현재 HP는 새 최대치 클램프.
         const hpDelta = Math.max(0, stats.maxHp - state.combat.boxerMaxHp);
         const boxerHp = Math.min(stats.maxHp, state.combat.boxerHp + hpDelta);
-        // 변경된 공격 속도를 반영해 4종 공격 쿨타임을 now 기준으로 재설정한다(가정: 콤보 진행 초기화).
-        const rescheduled = rescheduleAttacks(state.combat, stats.attackSpeed, now);
+        // 변경된 공격 속도를 반영하되 진행 중인 공격 쿨타임 진척을 보존해 재스케줄한다(연타 강화로도 공격이 끊기지 않음).
+        const rescheduled = rescheduleAttacks(state.combat, prevStats.attackSpeed, stats.attackSpeed, now);
         const upgradedCombat = {
           ...rescheduled,
           boxerHp,

@@ -413,3 +413,48 @@ describe("자동 전투 게임 스토어", () => {
     expect(store.getState().recentDefense?.counterDamage).toBeGreaterThan(0);
   });
 });
+
+// 버그 수정: 강화(upgrade)를 해도 자동 공격이 멈추지 않아야 한다.
+//   이전엔 강화 때마다 공격 쿨타임을 전체 리셋해, 연타하면 nextAttackAt이 계속 밀려 공격이 멈췄다.
+describe("강화 시 자동 공격 지속", () => {
+  it("강화를 연타해도 nextAttackAt이 최초 값보다 미래로 밀리지 않고 이후 공격이 정상 발동한다", () => {
+    const clock = new FakeClock();
+    const store = createGameStore(dependencies(clock));
+    store.getState().createBoxer("강화 복서");
+    // 강화 비용을 충분히 감당하도록 골드를 크게 준다.
+    store.setState({ boxer: { ...store.getState().boxer!, gold: 10_000_000 } });
+
+    const original = store.getState().combat!.nextAttackAt;
+    // 첫 공격 직전(쿨타임 도중)까지 진행한 뒤 강화를 연타한다.
+    clock.advanceTo(original / 2);
+    for (let i = 0; i < 12; i += 1) {
+      store.getState().upgrade("attackSpeed");
+    }
+    const afterSpam = store.getState().combat!.nextAttackAt;
+    // 진척 보존: 연타해도 다음 공격이 최초 시각보다 미래로 밀리지 않는다(공격 속도 상승분만큼 오히려 당겨질 수 있음).
+    expect(afterSpam).toBeLessThanOrEqual(original + 1e-6);
+    // 그리고 여전히 미래에 예약돼 있어(타이머 유지) 시간이 지나면 발동한다.
+    expect(clock.timers.size).toBe(1);
+
+    const monsterHpBefore = store.getState().combat!.monsterHp;
+    clock.advanceTo(original + 2_000);
+    // 강화 후에도 공격이 이어져 몬스터 HP가 줄거나 처치로 진행됐다.
+    expect(store.getState().lastAttack).not.toBeNull();
+    const progressed =
+      store.getState().combat!.monsterHp < monsterHpBefore ||
+      store.getState().boxer!.totalKills > 0;
+    expect(progressed).toBe(true);
+  });
+
+  it("단발 강화는 다음 공격을 한 사이클 통째로 지연시키지 않는다(비후퇴)", () => {
+    const clock = new FakeClock();
+    const store = createGameStore(dependencies(clock));
+    store.getState().createBoxer("강화 복서");
+    store.setState({ boxer: { ...store.getState().boxer!, gold: 10_000_000 } });
+
+    const original = store.getState().combat!.nextAttackAt;
+    clock.advanceTo(original / 2);
+    store.getState().upgrade("attackSpeed");
+    expect(store.getState().combat!.nextAttackAt).toBeLessThanOrEqual(original + 1e-6);
+  });
+});

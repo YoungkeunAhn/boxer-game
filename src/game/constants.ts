@@ -330,8 +330,11 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 //   합산만 되고 미적용 = 문서 명시 효과 무동작)하고, 전투 중 스킬 장착/해제가 combat.skillCooldowns를
 //   재정합하도록 수정(이전엔 새 액티브 스킬이 다음 처치 전까지 미발동). 전자가 전투 cadence를 바꾸는
 //   밸런스 변경이라 BALANCE 8→9(저장 형태 불변 → SCHEMA 6 유지).
+// v1.3d 후속(버그 수정): 강화 시 rescheduleAttacks가 공격 쿨타임 진척(progress)을 보존하도록 변경(이전엔
+//   전체 리셋 → 강화를 연타하면 nextAttackAt이 계속 밀려 공격이 멈춤). 전투 cadence를 바꾸는 변경이라
+//   BALANCE 9→10(저장 형태 불변 → SCHEMA 6 유지).
 export const SCHEMA_VERSION = 6;
-export const BALANCE_VERSION = 9;
+export const BALANCE_VERSION = 10;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export const BOXER_TYPES = ["INFIGHTER", "OUT_BOXER"] as const satisfies readonly BoxerType[];

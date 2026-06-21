@@ -8,9 +8,9 @@ export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
 export const SAVE_KEY = "boxer-game.save.v6";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-// 상수와 동기화(constants.ts): SCHEMA 6, BALANCE 9(나비스텝 쿨감 적용·스킬 장착 쿨타임 재정합 버그 수정).
+// 상수와 동기화(constants.ts): SCHEMA 6, BALANCE 10(강화 시 공격 쿨타임 진척 보존 버그 수정).
 export const SCHEMA_VERSION = 6;
-export const BALANCE_VERSION = 9;
+export const BALANCE_VERSION = 10;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";

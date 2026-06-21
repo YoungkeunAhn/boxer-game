@@ -86,8 +86,9 @@ function minReadyAt(nextReadyAt: Record<AttackType, number>): number {
   return min;
 }
 
-// 전투 시작·스테이지 전이·강화(공격 속도 변동) 시 4종 공격 쿨타임을 now 기준으로 재설정한다.
-// 가정: 새 전투/강화 시 콤보 진행(직전 손)을 초기화한다(lastHand는 호출부가 정함).
+// 전투 시작·스테이지 전이 시 4종 공격 쿨타임을 now 기준으로 전체 재설정한다(createCombatRuntime 전용).
+// 가정: 새 전투/전이 시 콤보 진행(직전 손)을 초기화한다(lastHand는 호출부가 정함).
+//   강화로 공격 속도가 바뀔 때는 이 함수가 아니라 rescheduleAttacks(진척 보존)를 쓴다.
 function createAttackSchedule(
   attackSpeed: number,
   now: number,
@@ -229,11 +230,29 @@ export function createCombatRuntime(
   };
 }
 
-// 강화 등으로 공격 속도가 바뀌었을 때 공격 쿨타임만 now 기준으로 재설정한 새 런타임을 만든다(HP·진행 유지).
-export function rescheduleAttacks(combat: CombatRuntime, attackSpeed: number, now: number): CombatRuntime {
+// 강화로 공격 속도가 바뀌었을 때 공격 쿨타임 "진척(progress)"을 보존해 재스케줄한 새 런타임을 만든다(HP·진행 유지).
+// 가정: 전체 리셋(now+쿨타임)이 아니라, 타입별로 이미 지난 진척 비율을 새 쿨타임에 비례 적용한다.
+//   타입별 remaining = max(0, nextReadyAt[type] - now), fraction = oldCd>0 ? min(1, remaining/oldCd) : 0,
+//   새 nextReadyAt[type] = now + fraction × newCd. 따라서 ① 같은 속도(oldCd==newCd)면 nextAttackAt이 사실상 불변이고,
+//   ② 속도가 오르면(newCd<oldCd) 다음 공격이 당겨지거나 같으며 절대 멀어지지 않는다 → 연타 강화로 공격이 끊기지 않는다.
+// 가정: oldAttackSpeed/newAttackSpeed는 양수(>0)이며 effectiveCooldownMs는 항상 유한·양수. 시간값이라 정수 클램프 불필요.
+//   강화는 버프를 바꾸지 않으므로 cooldownSpeedup은 old/new가 같다 → 진척 비율 계산에서 상쇄되어 기본 쿨타임으로 충분.
+export function rescheduleAttacks(
+  combat: CombatRuntime,
+  oldAttackSpeed: number,
+  newAttackSpeed: number,
+  now: number,
+): CombatRuntime {
   assertTimestamp(now, "now");
-  const schedule = createAttackSchedule(attackSpeed, now);
-  return { ...combat, nextReadyAt: schedule.nextReadyAt, nextAttackAt: schedule.nextAttackAt };
+  const nextReadyAt = { ...combat.nextReadyAt };
+  for (const type of ATTACK_TYPES) {
+    const oldCd = effectiveCooldownMs(type, oldAttackSpeed);
+    const newCd = effectiveCooldownMs(type, newAttackSpeed);
+    const remaining = Math.max(0, combat.nextReadyAt[type] - now);
+    const fraction = oldCd > 0 ? Math.min(1, remaining / oldCd) : 0;
+    nextReadyAt[type] = now + fraction * newCd;
+  }
+  return { ...combat, nextReadyAt, nextAttackAt: minReadyAt(nextReadyAt) };
 }
 
 // v1.2a/v1.2b: 몬스터 공격 한 번. 회피 → 가드 → 피격 순으로 판정한다.

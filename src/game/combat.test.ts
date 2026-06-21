@@ -16,6 +16,7 @@ import {
   matchCombination,
   nextComboBeat,
   resolveAttack,
+  rescheduleAttacks,
   resolveBossTimeout,
   resolveGroggy,
   resolveMonsterAttack,
@@ -906,5 +907,90 @@ describe("전용 스킬 전투 연결 (v1.3d)", () => {
     const plain = resolveMonsterAttack(b, base, 0.99, 2_000);
     const delayed = resolveMonsterAttack(b, withBuff, 0.99, 2_000);
     expect(delayed.combat.nextMonsterAttackAt).toBeGreaterThan(plain.combat.nextMonsterAttackAt);
+  });
+});
+
+// 버그 수정: 강화 시 rescheduleAttacks가 공격 쿨타임 진척(progress)을 보존해야 한다.
+//   이전엔 전체 리셋이라 강화를 연타하면 nextAttackAt이 계속 미래로 밀려 공격이 멈췄다.
+describe("rescheduleAttacks(강화 시 진척 보존)", () => {
+  const ATTACK_TYPES: AttackType[] = ["JAB", "STRAIGHT", "HOOK", "UPPER"];
+  const baseSpeed = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).attackSpeed;
+
+  it("같은 공격 속도로 재스케줄하면 다음 공격 시각이 사실상 불변(진척 보존)이다", () => {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    // now=200 시점에 같은 속도로 재스케줄 → remaining/oldCd × newCd = remaining → 원래 시각 그대로.
+    const r = rescheduleAttacks(base, baseSpeed, baseSpeed, 200);
+    for (const type of ATTACK_TYPES) {
+      expect(r.nextReadyAt[type]).toBeCloseTo(base.nextReadyAt[type], 6);
+    }
+    expect(r.nextAttackAt).toBeCloseTo(base.nextAttackAt, 6);
+  });
+
+  it("공격 속도가 오르면 다음 공격이 당겨지거나 같고, 절대 더 멀어지지 않는다", () => {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    const r = rescheduleAttacks(base, baseSpeed, baseSpeed * 2, 200);
+    for (const type of ATTACK_TYPES) {
+      expect(r.nextReadyAt[type]).toBeLessThanOrEqual(base.nextReadyAt[type] + 1e-6);
+    }
+    expect(r.nextAttackAt).toBeLessThan(base.nextAttackAt);
+  });
+
+  it("강화를 연타(여러 번 재스케줄)해도 nextAttackAt이 최초 값보다 미래로 밀리지 않는다", () => {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    const original = base.nextAttackAt;
+    let combat = base;
+    let speed = baseSpeed;
+    for (let i = 0; i < 10; i += 1) {
+      const next = speed * 1.05;
+      combat = rescheduleAttacks(combat, speed, next, 200);
+      speed = next;
+    }
+    expect(combat.nextAttackAt).toBeLessThanOrEqual(original + 1e-6);
+  });
+
+  it("방금 친 직후(remaining≈oldCd)면 새 쿨타임 한 사이클로 잡힌다(fraction≈1)", () => {
+    // now=0에 막 예약된 상태 → remaining = oldCd, fraction=1, 새 nextReadyAt = now + newCd.
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    const r = rescheduleAttacks(base, baseSpeed, baseSpeed * 2, 0);
+    for (const type of ATTACK_TYPES) {
+      // newCd = oldCd/2 이므로 새 시각도 절반.
+      expect(r.nextReadyAt[type]).toBeCloseTo(base.nextReadyAt[type] / 2, 6);
+    }
+  });
+
+  it("이미 준비된 공격(remaining=0)이면 즉시(now) 준비된다", () => {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, 0);
+    // 모든 공격이 now=1000 이전(500)에 ready → remaining 0 → 새 시각 = now.
+    const ready: CombatRuntime = {
+      ...base,
+      nextReadyAt: { JAB: 500, STRAIGHT: 500, HOOK: 500, UPPER: 500 },
+      nextAttackAt: 500,
+    };
+    const r = rescheduleAttacks(ready, baseSpeed, baseSpeed * 2, 1_000);
+    expect(r.nextAttackAt).toBe(1_000);
+    for (const type of ATTACK_TYPES) {
+      expect(r.nextReadyAt[type]).toBe(1_000);
+    }
+  });
+
+  it("HP·콤보·그로기·스킬 등 진행 상태는 그대로 보존한다", () => {
+    const base = createCombatRuntime(boxer, { chapter: 1, stage: 5 }, 0);
+    const rich: CombatRuntime = {
+      ...base,
+      monsterHp: 7,
+      boxerHp: 42,
+      attackHistory: [{ attackType: "JAB", hand: "LEFT" }],
+      comboGauge: 3,
+      comboStep: 1,
+      groggyGauge: 5,
+    };
+    const r = rescheduleAttacks(rich, baseSpeed, baseSpeed * 2, 100);
+    expect(r.monsterHp).toBe(7);
+    expect(r.boxerHp).toBe(42);
+    expect(r.attackHistory).toEqual(rich.attackHistory);
+    expect(r.comboGauge).toBe(3);
+    expect(r.comboStep).toBe(1);
+    expect(r.groggyGauge).toBe(5);
+    expect(r.boxerMaxHp).toBe(rich.boxerMaxHp);
   });
 });
