@@ -1,0 +1,176 @@
+.header {
+  min-width: 0;
+  padding: 18px;
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: rgba(23, 28, 40, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+  overflow-x: hidden;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.worldMapButton {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: #cdd4e2;
+  background: #10141d;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: not-allowed;
+}
+
+.worldMapButton:disabled {
+  color: #6c7385;
+  opacity: 0.8;
+}
+
+.stageLabel {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #f6bb43;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 14px;
+  border-radius: 99px;
+  background: #0b0e15;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.dotBoss {
+  background: #2a1416;
+}
+
+.dotCurrent {
+  background: linear-gradient(90deg, #d73c36, #f07b49);
+  box-shadow: 0 0 0 2px rgba(240, 123, 73, 0.35);
+}
+
+.dotBoss.dotCurrent {
+  background: linear-gradient(135deg, #da553b, #9f2e2e);
+  box-shadow: 0 0 0 2px rgba(218, 85, 59, 0.45);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #10141d;
+}
+
+.cardBoss {
+  background: linear-gradient(160deg, #2a1416, #1a1118);
+}
+
+.cardEyebrow {
+  margin: 0;
+  color: #f6bb43;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.cardBoss .cardEyebrow {
+  color: #ff9c7e;
+}
+
+.cardName {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.cardSub {
+  margin: 0;
+  color: #9fa7b8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.cardHp {
+  margin: 3px 0 0;
+  color: #f3f5f9;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cardAttack {
+  margin: 0;
+  color: #ff866e;
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.versus {
+  align-self: center;
+  flex: 0 0 auto;
+  color: #f6bb43;
+  font-size: 0.9rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 420px) {
+  .header {
+    padding: 14px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+
+  .cards {
+    gap: 6px;
+  }
+
+  .card {
+    padding: 10px;
+  }
+
+  .cardName {
+    font-size: 0.92rem;
+  }
+}
