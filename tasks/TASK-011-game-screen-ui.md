@@ -6,7 +6,7 @@
 
 ## 참고 문서
 
-- `docs/기획/presentation/ui.md`, `docs/기획/combat/hp-and-defeat.md`, `docs/기획/combat/boss.md`
+- `docs/presentation/ui.md`, `docs/combat/hp-and-defeat.md`, `docs/combat/boss.md`
 - `docs/browser-smoke-checklist.md`
 
 ## 작업 범위

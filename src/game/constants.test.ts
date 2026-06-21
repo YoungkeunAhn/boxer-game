@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { STAGES_BALANCE_VERSION } from "../data/stages";
 import {
+  ACTIVE_SKILL_SLOT_MAX,
   ATTACK_HISTORY_LIMIT,
   BALANCE_VERSION,
   BOSS_TIME_LIMIT_MS,
@@ -9,11 +10,19 @@ import {
   COMBO_GAUGE_MAX,
   COMBO_GAUGE_PER_JAB,
   DEFAULT_AUTO_MODE,
+  DEFAULT_EQUIPPED_SKILLS,
   DEFAULT_SPEED_MULTIPLIER,
+  FULL_COMBO_GROGGY_BONUS,
+  GROGGY_DAMAGE_MULT,
+  GROGGY_DURATION_MS,
+  GROGGY_GAIN_BY_ATTACK,
+  GROGGY_MAX_BASE,
   INITIAL_COMBAT_STATS,
   INITIAL_UPGRADE_LEVELS,
   OFFLINE_MAX_DURATION_MS,
+  PASSIVE_SKILL_SLOT_MAX,
   SCHEMA_VERSION,
+  SKILL_NUMBERS,
   SPEED_MULTIPLIERS,
   TYPE_SKILLS,
   TYPE_SWITCH_COOLDOWN_MS,
@@ -22,6 +31,7 @@ import {
   UPGRADE_MAX_LEVELS,
 } from "./constants";
 import { BOXER_TYPES } from "./constants";
+import { isSkillEquippableFor, isActiveSkill, isPassiveSkill } from "../data/skills";
 
 describe("게임 기준 상수", () => {
   it("자동 전투 초기값과 데이터 버전을 고정한다", () => {
@@ -47,8 +57,8 @@ describe("게임 기준 상수", () => {
       dodge: 0,
       counter: 0,
     });
-    expect(SCHEMA_VERSION).toBe(7);
-    expect(BALANCE_VERSION).toBe(8);
+    expect(SCHEMA_VERSION).toBe(8);
+    expect(BALANCE_VERSION).toBe(11);
     expect(STAGES_BALANCE_VERSION).toBe(BALANCE_VERSION);
   });
 
@@ -99,6 +109,29 @@ describe("게임 기준 상수", () => {
     expect(inf.damageReductionMultiplier).toBeGreaterThan(out.damageReductionMultiplier);
   });
 
+  it("그로기 상수가 불변식을 지킨다", () => {
+    // 상한·지속은 양수, 추가 피해 배수는 1 초과.
+    expect(GROGGY_MAX_BASE).toBeGreaterThan(0);
+    expect(GROGGY_DURATION_MS).toBeGreaterThan(0);
+    expect(GROGGY_DAMAGE_MULT).toBeGreaterThan(1);
+    // 공격별 누적량은 음수 없음. 잽·스트레이트는 0, 훅·어퍼는 양수.
+    for (const v of Object.values(GROGGY_GAIN_BY_ATTACK)) {
+      expect(v).toBeGreaterThanOrEqual(0);
+    }
+    expect(GROGGY_GAIN_BY_ATTACK.JAB).toBe(0);
+    expect(GROGGY_GAIN_BY_ATTACK.STRAIGHT).toBe(0);
+    expect(GROGGY_GAIN_BY_ATTACK.HOOK).toBeGreaterThan(0);
+    expect(GROGGY_GAIN_BY_ATTACK.UPPER).toBeGreaterThan(GROGGY_GAIN_BY_ATTACK.HOOK);
+    // 풀콤보 그로기 보너스는 양수(TASK-009에서 0→양수로 활성화).
+    expect(FULL_COMBO_GROGGY_BONUS).toBeGreaterThan(0);
+    // 타입별 그로기 누적: 인파이터(빠름) > 아웃복서(느림).
+    expect(BOXER_TYPE_MODIFIERS.INFIGHTER.groggyGainMultiplier).toBeGreaterThan(1);
+    expect(BOXER_TYPE_MODIFIERS.OUT_BOXER.groggyGainMultiplier).toBeLessThan(1);
+    expect(BOXER_TYPE_MODIFIERS.INFIGHTER.groggyGainMultiplier).toBeGreaterThan(
+      BOXER_TYPE_MODIFIERS.OUT_BOXER.groggyGainMultiplier,
+    );
+  });
+
   it("강화 비용, 상한, 보스와 오프라인 제한을 고정한다", () => {
     expect(UPGRADE_BASE_COSTS).toEqual({
       attackPower: 10,
@@ -126,10 +159,9 @@ describe("게임 기준 상수", () => {
     expect(OFFLINE_MAX_DURATION_MS).toBe(28_800_000);
   });
 
-  it("TASK-015 전투 컨트롤 기본값과 배속 단계를 고정하고, 저장/밸런스 버전은 불변이다", () => {
-    // 컨트롤은 휘발 UI 상태(저장 안 함), 보스 타임아웃은 게임 시간 기준 → 두 버전 모두 불변.
-    expect(SCHEMA_VERSION).toBe(7);
-    expect(BALANCE_VERSION).toBe(8);
+  it("TASK-015 전투 컨트롤 기본값과 배속 단계를 고정하고, 저장/밸런스 버전은 통합값이다", () => {
+    expect(SCHEMA_VERSION).toBe(8);
+    expect(BALANCE_VERSION).toBe(11);
     // 가정값: 배속 x1/x2, 기본 AUTO·x1.
     expect(SPEED_MULTIPLIERS).toEqual([1, 2]);
     expect(DEFAULT_SPEED_MULTIPLIER).toBe(1);
@@ -150,11 +182,51 @@ describe("게임 기준 상수", () => {
   });
 
   it("TASK-017 타입 전환 비용·쿨다운 임시값이 정의돼 있다(가정값: 무료·무제한)", () => {
-    // 가정/TODO: P3(TASK-019) 재화 도입 전까지 무료, 쿨다운 0(무제한). 저장/밸런스 버전은 불변.
+    // 가정/TODO: P3(TASK-019) 재화 도입 전까지 무료, 쿨다운 0(무제한).
     expect(TYPE_SWITCH_COST).toBe(0);
     expect(TYPE_SWITCH_COOLDOWN_MS).toBe(0);
     expect(TYPE_SWITCH_COOLDOWN_MS).toBeGreaterThanOrEqual(0);
-    expect(SCHEMA_VERSION).toBe(7);
-    expect(BALANCE_VERSION).toBe(8);
+  });
+
+  it("전용 스킬 슬롯 수와 가정 수치 불변식을 지킨다", () => {
+    expect(ACTIVE_SKILL_SLOT_MAX).toBe(3);
+    expect(PASSIVE_SKILL_SLOT_MAX).toBe(1);
+
+    // 액티브 스킬 쿨타임은 양수, 다단 타수는 양수.
+    expect(SKILL_NUMBERS.liver_shot.cooldownMs).toBeGreaterThan(0);
+    expect(SKILL_NUMBERS.dempsey_roll.hits).toBeGreaterThan(0);
+    expect(SKILL_NUMBERS.phantom_jab.hits).toBeGreaterThan(0);
+
+    // 버프율은 0~1 범위(가산형 임시값).
+    for (const rate of [
+      SKILL_NUMBERS.pressure.hookUpperDamageBonus,
+      SKILL_NUMBERS.pressure.monsterAttackWeaken,
+      SKILL_NUMBERS.navi_step.dodgeBonus,
+      SKILL_NUMBERS.navi_step.cooldownSpeedup,
+      SKILL_NUMBERS.distance_control.monsterCooldownDelay,
+      SKILL_NUMBERS.iron_guard.damageReduction,
+    ]) {
+      expect(rate).toBeGreaterThan(0);
+      expect(rate).toBeLessThanOrEqual(1);
+    }
+
+    // 내상 지속·틱은 양수.
+    expect(SKILL_NUMBERS.liver_shot.internalDurationMs).toBeGreaterThan(0);
+    expect(SKILL_NUMBERS.liver_shot.internalTickMs).toBeGreaterThan(0);
+  });
+
+  it("타입별 기본 장착 스킬이 타입에 맞고 슬롯 수를 지킨다", () => {
+    for (const type of ["INFIGHTER", "OUT_BOXER"] as const) {
+      const equipped = DEFAULT_EQUIPPED_SKILLS[type];
+      expect(equipped.active.length).toBeLessThanOrEqual(ACTIVE_SKILL_SLOT_MAX);
+      for (const id of equipped.active) {
+        expect(isSkillEquippableFor(id, type)).toBe(true);
+        expect(isActiveSkill(id)).toBe(true);
+      }
+      if (equipped.passive) {
+        expect(isSkillEquippableFor(equipped.passive, type)).toBe(true);
+        expect(isPassiveSkill(equipped.passive)).toBe(true);
+      }
+    }
   });
 });

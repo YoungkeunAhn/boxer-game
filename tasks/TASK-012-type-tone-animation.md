@@ -6,7 +6,7 @@
 
 ## 참고 문서
 
-- `docs/기획/presentation/ui-tone.md`, `docs/기획/presentation/animation.md`
+- `docs/presentation/ui-tone.md`, `docs/presentation/animation.md`
 - `docs/game-rating.md`
 
 ## 작업 범위

@@ -30,6 +30,12 @@ const validQuestState = {
   resetAt: { daily: 1_900_000_000_000, weekly: 1_900_600_000_000 },
 };
 
+// 아웃복서 기본 장착 스킬(constants.DEFAULT_EQUIPPED_SKILLS.OUT_BOXER와 동일).
+const OUT_BOXER_SKILLS = {
+  active: ["phantom_jab", "ghost_step", "navi_step"] as const,
+  passive: "step_back_counter" as const,
+};
+
 const snapshot: SaveSnapshot = {
   boxer: {
     id: "player",
@@ -42,19 +48,20 @@ const snapshot: SaveSnapshot = {
     diamond: 250,
     playerLevel: 3,
     playerExp: 17,
+    equippedSkills: { active: [...OUT_BOXER_SKILLS.active], passive: OUT_BOXER_SKILLS.passive },
   },
   position: { chapter: 4, stage: 2 },
   isFarming: false,
   questState: validQuestState,
 };
 
-describe("v7 저장과 불러오기", () => {
-  it("저장 데이터를 v7 키에 기록하고 재화·플레이어 레벨·퀘스트까지 복원한다", () => {
+describe("v8 저장과 불러오기", () => {
+  it("저장 데이터를 v8 키에 기록하고 재화·플레이어 레벨·퀘스트·장착 스킬까지 복원한다", () => {
     const storage = createMemoryStorage();
     const now = new Date("2026-01-01T00:00:00.000Z");
-    // TASK-021: SAVE_KEY는 boxer-game.save.v7, SCHEMA 7.
-    expect(SAVE_KEY).toBe("boxer-game.save.v7");
-    expect(SCHEMA_VERSION).toBe(7);
+    // SAVE_KEY는 boxer-game.save.v8, SCHEMA 8.
+    expect(SAVE_KEY).toBe("boxer-game.save.v8");
+    expect(SCHEMA_VERSION).toBe(8);
     expect(saveGame(snapshot, storage, now)).toBe(true);
     expect(storage.getItem(SAVE_KEY)).not.toBeNull();
     expect(loadGame(storage)).toEqual({
@@ -75,12 +82,17 @@ describe("v7 저장과 불러오기", () => {
     expect(loaded.data.boxer.diamond).toBe(250);
     expect(loaded.data.boxer.playerLevel).toBe(3);
     expect(loaded.data.boxer.playerExp).toBe(17);
+    // 장착 스킬 라운드트립 복원.
+    expect(loaded.data.boxer.equippedSkills).toEqual({
+      active: [...OUT_BOXER_SKILLS.active],
+      passive: OUT_BOXER_SKILLS.passive,
+    });
     // TASK-021(P3): 퀘스트 상태 라운드트립 복원.
     expect(loaded.data.questState).toEqual(validQuestState);
   });
 
   it.each(LEGACY_SAVE_KEYS)(
-    "v7이 없고 구버전(%s)이 있으면 삭제하지 않고 legacy로 분류한다",
+    "v8이 없고 구버전(%s)이 있으면 삭제하지 않고 legacy로 분류한다",
     (legacyKey) => {
       const storage = createMemoryStorage();
       storage.setItem(legacyKey, "legacy-data");
@@ -89,17 +101,28 @@ describe("v7 저장과 불러오기", () => {
     },
   );
 
-  it("v6(=LEGACY 최상위)가 LEGACY_SAVE_KEYS 맨 앞에 추가됐고, v6만 있으면 legacy로 안내한다", () => {
-    // TASK-021: 옛 v6 저장(questState 없음)은 삭제하지 않고 legacy로 안내한다.
-    expect(LEGACY_SAVE_KEYS[0]).toBe("boxer-game.save.v6");
-    expect(LEGACY_SAVE_KEY).toBe("boxer-game.save.v6");
+  it("v7(=LEGACY 최상위)가 LEGACY_SAVE_KEYS 맨 앞에 있고, v7만 있으면 legacy로 안내한다", () => {
+    // 옛 v7 저장(questState 없음)은 삭제하지 않고 legacy로 안내한다.
+    expect(LEGACY_SAVE_KEYS[0]).toBe("boxer-game.save.v7");
+    expect(LEGACY_SAVE_KEY).toBe("boxer-game.save.v7");
     const storage = createMemoryStorage();
-    storage.setItem("boxer-game.save.v6", JSON.stringify({
-      schemaVersion: 6, balanceVersion: 7, savedAt: new Date().toISOString(),
+    storage.setItem("boxer-game.save.v7", JSON.stringify({
+      schemaVersion: 7, balanceVersion: 10, savedAt: new Date().toISOString(),
       boxer: snapshot.boxer, position: { chapter: 1, stage: 1 }, isFarming: false,
     }));
     expect(loadGame(storage)).toEqual({ status: "legacy" });
-    expect(storage.getItem("boxer-game.save.v6")).not.toBeNull();
+    expect(storage.getItem("boxer-game.save.v7")).not.toBeNull();
+  });
+
+  it("equippedSkills가 없는 구버전 저장은 마이그레이션하지 않고 legacy로 안내한다", () => {
+    const storage = createMemoryStorage();
+    // v8 활성 키가 없고 구버전(LEGACY_SAVE_KEY)만 있으면 legacy로 분류한다.
+    storage.setItem(LEGACY_SAVE_KEY, JSON.stringify({
+      schemaVersion: 7, balanceVersion: 10, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: { chapter: 1, stage: 1 }, isFarming: false,
+    }));
+    expect(loadGame(storage)).toEqual({ status: "legacy" });
+    expect(storage.getItem(LEGACY_SAVE_KEY)).not.toBeNull();
   });
 
   it("4스테이지 반복 파밍 모드를 저장하고 그대로 복원한다", () => {
@@ -116,9 +139,13 @@ describe("v7 저장과 불러오기", () => {
 
   it.each([
     ["손상된 JSON", "{not-json"],
-    ["지원하지 않는 스키마(v6)", JSON.stringify({
-      schemaVersion: 6, balanceVersion: 7, savedAt: new Date().toISOString(),
+    ["지원하지 않는 스키마(v7)", JSON.stringify({
+      schemaVersion: 7, balanceVersion: 10, savedAt: new Date().toISOString(),
       boxer: snapshot.boxer, position: snapshot.position, isFarming: false, questState: validQuestState,
+    })],
+    ["지원하지 않는 스키마(v5)", JSON.stringify({
+      schemaVersion: 5, balanceVersion: 7, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
     })],
     ["지원하지 않는 밸런스", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: 999, savedAt: new Date().toISOString(),
@@ -190,6 +217,28 @@ describe("v7 저장과 불러오기", () => {
       boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
       questState: { ...validQuestState, resetAt: { daily: 1 } },
     })],
+    ["equippedSkills 누락", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: { ...snapshot.boxer, equippedSkills: undefined }, position: snapshot.position, isFarming: false,
+    })],
+    ["교차 타입 스킬 장착(아웃복서에 인파이터 스킬)", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: { ...snapshot.boxer, equippedSkills: { active: ["liver_shot"], passive: null } },
+      position: snapshot.position, isFarming: false,
+    })],
+    ["액티브 슬롯 초과(4종)", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: {
+        ...snapshot.boxer,
+        equippedSkills: { active: ["phantom_jab", "ghost_step", "navi_step", "distance_control"], passive: null },
+      },
+      position: snapshot.position, isFarming: false,
+    })],
+    ["패시브 슬롯에 액티브 스킬", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: { ...snapshot.boxer, equippedSkills: { active: [], passive: "phantom_jab" } },
+      position: snapshot.position, isFarming: false,
+    })],
   ])("%s 저장을 invalid로 분류하고 원문을 유지한다", (_name, serialized) => {
     const storage = createMemoryStorage();
     storage.setItem(SAVE_KEY, serialized);
@@ -221,7 +270,7 @@ describe("v7 저장과 불러오기", () => {
     expect(storage.getItem(SAVE_KEY)).toBeNull();
   });
 
-  it("v7을 삭제해도 구버전(v6/v5/v4/v3/v2/v1)은 보존한다", () => {
+  it("v8을 삭제해도 구버전(v7/v6/v5/v4/v3/v2/v1)은 보존한다", () => {
     const storage = createMemoryStorage();
     for (const legacyKey of LEGACY_SAVE_KEYS) storage.setItem(legacyKey, "legacy-data");
     saveGame(snapshot, storage);

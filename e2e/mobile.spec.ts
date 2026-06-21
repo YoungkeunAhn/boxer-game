@@ -6,6 +6,8 @@ import {
   createBoxer,
   enterBoss,
   hpBar,
+  boxerHpBar,
+  groggyBar,
 } from "./fixtures";
 
 const section = (p: import("@playwright/test").Page, id: string) =>
@@ -65,13 +67,17 @@ test.describe("360px 모바일", () => {
     expect(await hasHorizontalScroll(page)).toBe(false);
   });
 
-  test("몬스터 HP 바와 보스 시간이 화면 안에 들어온다", async ({ page }) => {
+  test("복서 HP·몬스터 HP·그로기 바와 보스 시간이 화면 안에 들어온다", async ({ page }) => {
     await enterBoss(page);
 
     const viewport = page.viewportSize()!;
-    const hp = await hpBar(page).boundingBox();
+    // 보스 진입 시 그로기 바가 나타난다(비보스에서는 표시되지 않음 → stages-boss.spec에서 검증).
+    await expect(groggyBar(page)).toBeVisible();
+    const boxerHp = await boxerHpBar(page).boundingBox();
+    const monsterHp = await hpBar(page).boundingBox();
+    const groggy = await groggyBar(page).boundingBox();
     const timer = await page.getByTestId("boss-timer").boundingBox();
-    for (const box of [hp, timer]) {
+    for (const box of [boxerHp, monsterHp, groggy, timer]) {
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
     }

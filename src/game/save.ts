@@ -1,5 +1,7 @@
 import { getStageDefinition } from "../data/stages";
+import { isSkillEquippableFor, isPassiveSkill, SKILLS_BY_ID } from "../data/skills";
 import {
+  ACTIVE_SKILL_SLOT_MAX,
   BALANCE_VERSION,
   BOXER_TYPES,
   GENDERS,
@@ -10,19 +12,22 @@ import {
 import type {
   Boxer,
   BoxerType,
+  EquippedSkills,
   Gender,
   QuestState,
-  SaveDataV7,
+  SaveDataV8,
+  SkillId,
   StagePosition,
   UpgradeKey,
   UpgradeLevels,
 } from "./types";
 
-export const SAVE_KEY = "boxer-game.save.v7";
-// 가정: 재화·레벨(v6) 또는 그 이전(v5/v4/v3/v2/v1) 저장은 자동 마이그레이션하지 않고 삭제·덮어쓰기 없이
-// legacy로만 안내한다. 마이그레이션을 택한다면 누락 필드(questState 등)에 초기값을 부여해 v7로 승격하는
-// 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다(tasks/README 공통 규칙).
+export const SAVE_KEY = "boxer-game.save.v8";
+// 가정: 통합 이전 두 라인의 구버전 저장(v7=재화·레벨·퀘스트, v6=스킬, v5~v1)은 자동 마이그레이션하지 않고
+// 삭제·덮어쓰기 없이 legacy로만 안내한다. 마이그레이션을 택한다면 누락 필드(equippedSkills/questState 등)에
+// 초기값을 부여해 v8로 승격하는 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다.
 export const LEGACY_SAVE_KEYS = [
+  "boxer-game.save.v7",
   "boxer-game.save.v6",
   "boxer-game.save.v5",
   "boxer-game.save.v4",
@@ -46,7 +51,7 @@ export type SaveSnapshot = {
 };
 
 export type LoadGameResult =
-  | { status: "loaded"; data: SaveDataV7 }
+  | { status: "loaded"; data: SaveDataV8 }
   | { status: "empty" }
   | { status: "legacy" }
   | { status: "invalid" }
@@ -101,6 +106,35 @@ function isGender(value: unknown): value is Gender {
   return GENDERS.includes(value as Gender);
 }
 
+function isSkillId(value: unknown): value is SkillId {
+  return typeof value === "string" && value in SKILLS_BY_ID;
+}
+
+// v1.3d: equippedSkills 검증. 액티브는 이 타입의 액티브 스킬만(슬롯 수 상한·교차 타입·중복 거부),
+//   패시브는 null 또는 이 타입의 패시브 스킬 1개만 허용한다. 형태가 어긋나면 false → 저장 invalid.
+function isEquippedSkills(value: unknown, boxerType: BoxerType): value is EquippedSkills {
+  if (typeof value !== "object" || value === null) return false;
+  const equipped = value as Record<string, unknown>;
+  const active = equipped.active;
+  if (!Array.isArray(active)) return false;
+  if (active.length > ACTIVE_SKILL_SLOT_MAX) return false;
+  const seen = new Set<SkillId>();
+  for (const id of active) {
+    if (!isSkillId(id)) return false;
+    if (isPassiveSkill(id)) return false; // 액티브 슬롯에 패시브 불가
+    if (!isSkillEquippableFor(id, boxerType)) return false; // 교차 타입 불가
+    if (seen.has(id)) return false; // 중복 불가
+    seen.add(id);
+  }
+  const passive = equipped.passive;
+  if (passive !== null) {
+    if (!isSkillId(passive)) return false;
+    if (!isPassiveSkill(passive)) return false; // 패시브 슬롯엔 패시브만
+    if (!isSkillEquippableFor(passive, boxerType)) return false; // 교차 타입 불가
+  }
+  return true;
+}
+
 function isBoxer(value: unknown): value is Boxer {
   if (typeof value !== "object" || value === null) return false;
   const boxer = value as Record<string, unknown>;
@@ -118,7 +152,9 @@ function isBoxer(value: unknown): value is Boxer {
     // TASK-019(P3): 재화·플레이어 레벨/경험치. 유한·세이프정수 범위 검증(누락/NaN/Infinity/음수/playerLevel<1 거부).
     isSafeNonNegativeInteger(boxer.diamond) &&
     isSafePositiveInteger(boxer.playerLevel) &&
-    isSafeNonNegativeInteger(boxer.playerExp)
+    isSafeNonNegativeInteger(boxer.playerExp) &&
+    // v1.3d: equippedSkills 누락·형태 오류·교차타입·슬롯초과는 invalid 처리.
+    isEquippedSkills(boxer.equippedSkills, boxer.boxerType as BoxerType)
   );
 }
 
@@ -183,7 +219,7 @@ function isQuestState(value: unknown): value is QuestState {
   );
 }
 
-function isSaveData(value: unknown): value is SaveDataV7 {
+function isSaveData(value: unknown): value is SaveDataV8 {
   if (typeof value !== "object" || value === null) return false;
   const save = value as Record<string, unknown>;
   return (
@@ -215,7 +251,7 @@ export function saveGame(
     return false;
   }
 
-  const data: SaveDataV7 = {
+  const data: SaveDataV8 = {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
     savedAt: now.toISOString(),

@@ -7,6 +7,7 @@ import {
   enterBoss,
   hpNow,
   hpMax,
+  groggyBar,
   statValue,
   type SeedOptions,
 } from "./fixtures";
@@ -30,12 +31,15 @@ test.describe("스테이지와 보스", () => {
     await createBoxer(page); // 1-1
     await expect(badge(page)).toHaveText("자동 전투");
     await expect(bossTimer(page)).toHaveCount(0);
+    // 일반 스테이지에서는 그로기 바가 표시되지 않는다.
+    await expect(groggyBar(page)).toHaveCount(0);
   });
 
-  test("보스 스테이지는 BOSS 배지와 30.0초 제한 시간을 보여준다", async ({ page }) => {
+  test("보스 스테이지는 BOSS 배지·30.0초 제한 시간·그로기 바를 보여준다", async ({ page }) => {
     await enterBoss(page);
     await expect(badge(page)).toHaveText("BOSS");
     await expect(bossTimer(page)).toHaveText("30.0초");
+    await expect(groggyBar(page)).toBeVisible();
   });
 
   test("보스 남은 시간이 감소하고 0 아래로 내려가지 않는다", async ({ page }) => {

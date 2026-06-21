@@ -6,8 +6,8 @@
 
 ## 참고 문서
 
-- `docs/기획/combat/basic-attacks.md`, `docs/기획/combat/combinations.md`(손 규칙), `docs/기획/presentation/animation.md`(애니메이션 키)
-- `docs/기획/systems/stats-and-formulas.md`
+- `docs/combat/basic-attacks.md`, `docs/combat/combinations.md`(손 규칙), `docs/presentation/animation.md`(애니메이션 키)
+- `docs/systems/stats-and-formulas.md`
 
 ## 작업 범위
 

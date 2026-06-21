@@ -1,0 +1,80 @@
+# 복서키우기
+
+복서가 몬스터를 자동 공격하고, 처치 골드로 능력치를 강화해 더 강한 보스와 무한히 이어지는 장에 도전하는 방치형 성장 게임이다.
+
+## 핵심 루프
+
+`자동 공격 → 몬스터 처치 → 골드 획득 → 능력치 강화 → 보스 돌파 → 다음 장 도전`
+
+## MVP 범위
+
+- 포함(v0.1 기준선): 복서 생성/조회, 자동 공격, 일반·보스 스테이지, 처치 골드, 5종 능력치 강화, 보스 실패 후 반복 파밍과 재도전, 저장/불러오기, 오프라인 파밍
+- 구현 완료(`수정내용2`, TASK-004~012): 복서 타입·성별, 복서 HP·몬스터 공격(회피/가드/카운터), 강화 4종 추가(체력·방어·회피·카운터), 기본 공격 4종·개별 쿨타임·콤비네이션·콤보 게이지, 보스 그로기, 타입 전용 스킬(액티브 3 + 패시브 1), 게임 화면형 UI·타입별 톤·연출 ([MVP 범위](./overview/mvp-scope.md) 참고)
+- 제외: PVP, 길드, 랭킹, 시즌패스, 결제, 광고, 장비, 코치, 서버 계정 동기화
+
+## 현재 구현 기준선
+
+아래 값은 `수정내용2`(TASK-004~012) 마감 시점의 확정값(`balanceVersion: 10`, `schemaVersion: 6`)이다. 값을 바꾸면 관련 문서, 테스트, `BALANCE_VERSION`(또는 저장 형태가 바뀌면 `SCHEMA_VERSION`)을 함께 갱신한다.
+
+| 항목 | 구현값 |
+| --- | --- |
+| 초기 능력치 | 공격력 10, 공격속도 1회/초, 치명타율 5%, 치명타 피해 2배, 골드 보너스 0% |
+| 복서 HP·방어·회피·카운터 | 기본 체력 100·방어 0·회피 5%·카운터 계수 1.0 |
+| 능력치 강화(9종) | 공격력·공격속도·치명타율·치명타 피해·골드 보너스 + 체력·방어·회피·카운터 |
+| 복서 타입/성별 | 인파이터/아웃복서(전투 보정), 남자/여자(외형 전용, 전투 영향 없음) |
+| 기본 공격 4종 | 잽(좌, 쿨 1초)·스트레이트(우, 5초)·훅(10초)·어퍼(15초), 실효 쿨 = 기본/공격속도 |
+| 콤비네이션 | 원투(스트레이트 ×1.3)·원투 훅(훅 치명타 +0.2)·풀콤보(어퍼 ×1.5, 그로기 +20), 콤보 게이지 잽당 +10/상한 100 |
+| 보스 그로기 | 훅 +15·어퍼 +25 누적(상한 100), 진입 시 4초간 받는 피해 ×1.5 |
+| 장착 스킬 | 타입별 액티브 최대 3 + 패시브 1(기본 4종은 고정·비저장) |
+| 일반/보스 구성 | 장마다 일반 4개와 30초 보스 1개 |
+| 기본 스테이지 HP | 30, 45, 68, 105, 330 |
+| 기본 스테이지 골드 | 5, 7, 10, 15, 50 |
+| 장 배율 | HP `1.8^(장-1)`, 골드 `1.6^(장-1)` |
+| 테마 | 숲 입구 → 늑대 숲 → 바위 협곡 순환 |
+| 오프라인 인정 시간 | 최대 8시간, 현재 일반 스테이지만 반복 파밍 |
+| 저장 키 | `boxer-game.save.v6`(구버전 `...v1`~`...v5`는 legacy로 안내, 비삭제) |
+| 저장 스키마 | `schemaVersion: 6` |
+| 밸런스 데이터 | `balanceVersion: 10` |
+
+## 작업 유형별 필수 문서
+
+| 작업 유형 | 먼저 읽을 문서 |
+| --- | --- |
+| 게임 규칙·밸런스 | 능력치와 수식, 콘텐츠 데이터, 데이터 모델 |
+| 자동 전투·상태 구현 | 게임 시스템, 데이터 모델, 기술 스택 |
+| 복서 타입·스킬 설계 | 복서 타입, 전용 스킬, 스킬 장착 구조 |
+| 전투 심화(HP·몬스터 공격) | 몬스터 공격, 체력과 실패, 보스전 |
+| UI·연출·QA | UI 구조, 타입별 UI 톤, 애니메이션, 브라우저 스모크 체크리스트 |
+| 저장·오프라인 보상 | 데이터 모델, 게임 시스템, 출시 체크리스트 |
+| 앱인토스 연동·출시 | 앱인토스 출시 전략, 출시 체크리스트, 게임 등급분류 준비 |
+
+## 문서 구조
+
+본 기획은 주제별 폴더로 구성한다. `수정내용2`(복서 타입·성별·스킬·복서 HP·몬스터 공격)는 TASK-004~012로 구현 완료됐고 TASK-013에서 버전·문서·테스트를 확정·정합화했다. 향후 검증 전 설계 판단은 각 문서 상단에 `가정:`으로, 미정 항목은 `TODO`로 표시한다.
+
+- **overview** — [프로젝트 개요](./overview/concept.md) · [핵심 루프](./overview/core-loop.md) · [핵심 방향과 한 줄 정의](./overview/one-line-definition.md) · [MVP 범위](./overview/mvp-scope.md)
+- **boxer** — [복서 타입](./boxer/types.md) · [인파이터](./boxer/infighter.md) · [아웃복서](./boxer/out-boxer.md) · [캐릭터 성별](./boxer/gender.md)
+- **combat** — [공통 기본 공격](./combat/basic-attacks.md) · [콤비네이션](./combat/combinations.md) · [몬스터 공격](./combat/monster-attacks.md) · [체력과 실패](./combat/hp-and-defeat.md) · [보스전](./combat/boss.md)
+- **skills** — [스킬 장착 구조](./skills/equip.md) · [인파이터 전용 스킬](./skills/infighter-skills.md) · [아웃복서 전용 스킬](./skills/out-boxer-skills.md)
+- **presentation** — [UI 구조](./presentation/ui.md) · [타입별 UI 톤](./presentation/ui-tone.md) · [애니메이션](./presentation/animation.md)
+- **systems** — [게임 시스템](./systems/game-systems.md) · [능력치와 수식](./systems/stats-and-formulas.md) · [스테이지 성장과 오프라인](./systems/stage-and-offline.md) · [콘텐츠 데이터](./systems/content-data.md) · [데이터 모델](./systems/data-model.md) · [저장 모델](./systems/save-model.md)
+- **progress** — [유저 플로우](./progress/user-flow.md) · [개발 로드맵](./progress/development-roadmap.md) · [개발 순서](./progress/dev-order.md)
+
+## 출시(release) 문서
+
+- [앱인토스 출시 전략](./release/platform-apps-in-toss.md)
+- [출시 체크리스트](./release/release-checklist.md)
+- [게임 등급분류 준비](./release/game-rating.md)
+- [기술 스택](./release/technical-stack.md)
+
+## 운영(process) 문서
+
+- [워크플로우 인덱스](./process/workflow-index.md)
+- [dev 개발 워크플로우](./process/dev-workflow.md)
+- [git 워크플로우](./process/git-workflow.md)
+- [브라우저 스모크 체크리스트](./process/browser-smoke-checklist.md)
+
+## 문서 작성 원칙
+
+- 미정 사항은 `TODO`, 검증 전 설계 판단은 `가정:`으로 표시한다.
+- 구현 중 규칙이 바뀌면 관련 문서와 저장·밸런스 데이터 버전을 함께 갱신한다.

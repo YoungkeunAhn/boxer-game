@@ -58,6 +58,7 @@ const boxer: Boxer = {
   diamond: 0,
   playerLevel: 1,
   playerExp: 0,
+  equippedSkills: { active: [], passive: null },
 };
 
 describe("자동 전투 수식", () => {
