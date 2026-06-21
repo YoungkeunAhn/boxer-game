@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { CombatControls } from "../components/CombatControls";
 import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
@@ -91,6 +92,8 @@ export function HomePage() {
             중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
         <CombatHeader />
         <CombatPanel />
+        {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
+        <CombatControls />
         <UpgradePanel boxer={boxer} />
       </div>
     </main>

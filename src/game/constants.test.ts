@@ -8,10 +8,13 @@ import {
   COMBINATIONS,
   COMBO_GAUGE_MAX,
   COMBO_GAUGE_PER_JAB,
+  DEFAULT_AUTO_MODE,
+  DEFAULT_SPEED_MULTIPLIER,
   INITIAL_COMBAT_STATS,
   INITIAL_UPGRADE_LEVELS,
   OFFLINE_MAX_DURATION_MS,
   SCHEMA_VERSION,
+  SPEED_MULTIPLIERS,
   UPGRADE_BASE_COSTS,
   UPGRADE_MAX_LEVELS,
 } from "./constants";
@@ -117,5 +120,15 @@ describe("게임 기준 상수", () => {
     });
     expect(BOSS_TIME_LIMIT_MS).toBe(30_000);
     expect(OFFLINE_MAX_DURATION_MS).toBe(28_800_000);
+  });
+
+  it("TASK-015 전투 컨트롤 기본값과 배속 단계를 고정하고, 저장/밸런스 버전은 불변이다", () => {
+    // 컨트롤은 휘발 UI 상태(저장 안 함), 보스 타임아웃은 게임 시간 기준 → 두 버전 모두 불변.
+    expect(SCHEMA_VERSION).toBe(5);
+    expect(BALANCE_VERSION).toBe(6);
+    // 가정값: 배속 x1/x2, 기본 AUTO·x1.
+    expect(SPEED_MULTIPLIERS).toEqual([1, 2]);
+    expect(DEFAULT_SPEED_MULTIPLIER).toBe(1);
+    expect(DEFAULT_AUTO_MODE).toBe("AUTO");
   });
 });
