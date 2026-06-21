@@ -20,6 +20,16 @@ function createMemoryStorage(): StorageAdapter {
   };
 }
 
+// TASK-021(P3): isQuestState를 통과하는 유효한 퀘스트 상태(라운드트립·유효 케이스용).
+const validQuestState = {
+  progress: { daily_stage_3: 1 },
+  claimed: { daily_stage_3: false },
+  dailyPoints: 20,
+  milestonesClaimed: [20],
+  dailySnapshot: { killMonster: 5, autoBattleMinutes: 0 },
+  resetAt: { daily: 1_900_000_000_000, weekly: 1_900_600_000_000 },
+};
+
 const snapshot: SaveSnapshot = {
   boxer: {
     id: "player",
@@ -35,15 +45,16 @@ const snapshot: SaveSnapshot = {
   },
   position: { chapter: 4, stage: 2 },
   isFarming: false,
+  questState: validQuestState,
 };
 
-describe("v6 저장과 불러오기", () => {
-  it("저장 데이터를 v6 키에 기록하고 재화·플레이어 레벨까지 복원한다", () => {
+describe("v7 저장과 불러오기", () => {
+  it("저장 데이터를 v7 키에 기록하고 재화·플레이어 레벨·퀘스트까지 복원한다", () => {
     const storage = createMemoryStorage();
     const now = new Date("2026-01-01T00:00:00.000Z");
-    // TASK-019: SAVE_KEY는 boxer-game.save.v6, SCHEMA 6.
-    expect(SAVE_KEY).toBe("boxer-game.save.v6");
-    expect(SCHEMA_VERSION).toBe(6);
+    // TASK-021: SAVE_KEY는 boxer-game.save.v7, SCHEMA 7.
+    expect(SAVE_KEY).toBe("boxer-game.save.v7");
+    expect(SCHEMA_VERSION).toBe(7);
     expect(saveGame(snapshot, storage, now)).toBe(true);
     expect(storage.getItem(SAVE_KEY)).not.toBeNull();
     expect(loadGame(storage)).toEqual({
@@ -64,10 +75,12 @@ describe("v6 저장과 불러오기", () => {
     expect(loaded.data.boxer.diamond).toBe(250);
     expect(loaded.data.boxer.playerLevel).toBe(3);
     expect(loaded.data.boxer.playerExp).toBe(17);
+    // TASK-021(P3): 퀘스트 상태 라운드트립 복원.
+    expect(loaded.data.questState).toEqual(validQuestState);
   });
 
   it.each(LEGACY_SAVE_KEYS)(
-    "v6이 없고 구버전(%s)이 있으면 삭제하지 않고 legacy로 분류한다",
+    "v7이 없고 구버전(%s)이 있으면 삭제하지 않고 legacy로 분류한다",
     (legacyKey) => {
       const storage = createMemoryStorage();
       storage.setItem(legacyKey, "legacy-data");
@@ -76,18 +89,17 @@ describe("v6 저장과 불러오기", () => {
     },
   );
 
-  it("v5(=LEGACY 최상위)가 LEGACY_SAVE_KEYS 맨 앞에 추가됐고, v5만 있으면 legacy로 안내한다", () => {
-    // TASK-019: 옛 v5 저장은 삭제하지 않고 legacy로 안내한다.
-    expect(LEGACY_SAVE_KEYS[0]).toBe("boxer-game.save.v5");
-    expect(LEGACY_SAVE_KEY).toBe("boxer-game.save.v5");
+  it("v6(=LEGACY 최상위)가 LEGACY_SAVE_KEYS 맨 앞에 추가됐고, v6만 있으면 legacy로 안내한다", () => {
+    // TASK-021: 옛 v6 저장(questState 없음)은 삭제하지 않고 legacy로 안내한다.
+    expect(LEGACY_SAVE_KEYS[0]).toBe("boxer-game.save.v6");
+    expect(LEGACY_SAVE_KEY).toBe("boxer-game.save.v6");
     const storage = createMemoryStorage();
-    storage.setItem("boxer-game.save.v5", JSON.stringify({
-      schemaVersion: 5, balanceVersion: 6, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, diamond: undefined, playerLevel: undefined, playerExp: undefined },
-      position: { chapter: 1, stage: 1 }, isFarming: false,
+    storage.setItem("boxer-game.save.v6", JSON.stringify({
+      schemaVersion: 6, balanceVersion: 7, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: { chapter: 1, stage: 1 }, isFarming: false,
     }));
     expect(loadGame(storage)).toEqual({ status: "legacy" });
-    expect(storage.getItem("boxer-game.save.v5")).not.toBeNull();
+    expect(storage.getItem("boxer-game.save.v6")).not.toBeNull();
   });
 
   it("4스테이지 반복 파밍 모드를 저장하고 그대로 복원한다", () => {
@@ -104,59 +116,79 @@ describe("v6 저장과 불러오기", () => {
 
   it.each([
     ["손상된 JSON", "{not-json"],
-    ["지원하지 않는 스키마(v5)", JSON.stringify({
-      schemaVersion: 5, balanceVersion: 6, savedAt: new Date().toISOString(),
-      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+    ["지원하지 않는 스키마(v6)", JSON.stringify({
+      schemaVersion: 6, balanceVersion: 7, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["지원하지 않는 밸런스", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: 999, savedAt: new Date().toISOString(),
-      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["잘못된 골드", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, gold: Number.POSITIVE_INFINITY }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, gold: Number.POSITIVE_INFINITY }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["회피 강화 누락", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
       boxer: { ...snapshot.boxer, upgradeLevels: { ...INITIAL_UPGRADE_LEVELS, dodge: undefined } },
-      position: snapshot.position, isFarming: false,
+      position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["음수 처치 수", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, totalKills: -1 }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, totalKills: -1 }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["알 수 없는 복서 타입", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, boxerType: "SLUGGER" }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, boxerType: "SLUGGER" }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["잘못된 스테이지", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: snapshot.boxer, position: { chapter: 1, stage: 6 }, isFarming: false,
+      boxer: snapshot.boxer, position: { chapter: 1, stage: 6 }, isFarming: false, questState: validQuestState,
     })],
     // TASK-019(P3): 신규 필드 검증.
     ["다이아 누락(옛 형태)", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, diamond: undefined }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, diamond: undefined }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["음수 다이아", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, diamond: -1 }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, diamond: -1 }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["비유한 경험치", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, playerExp: Number.POSITIVE_INFINITY }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, playerExp: Number.POSITIVE_INFINITY }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["세이프정수 초과 경험치", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, playerExp: Number.MAX_SAFE_INTEGER + 2 }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, playerExp: Number.MAX_SAFE_INTEGER + 2 }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["플레이어 레벨 0(1 미만)", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, playerLevel: 0 }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, playerLevel: 0 }, position: snapshot.position, isFarming: false, questState: validQuestState,
     })],
     ["플레이어 레벨 누락(옛 형태)", JSON.stringify({
       schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
-      boxer: { ...snapshot.boxer, playerLevel: undefined }, position: snapshot.position, isFarming: false,
+      boxer: { ...snapshot.boxer, playerLevel: undefined }, position: snapshot.position, isFarming: false, questState: validQuestState,
+    })],
+    // TASK-021(P3): 퀘스트 상태 검증.
+    ["퀘스트 상태 누락(옛 v6 형태)", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+    })],
+    ["퀘스트 진행 음수", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+      questState: { ...validQuestState, progress: { daily_stage_3: -1 } },
+    })],
+    ["알 수 없는 마일스톤 구간", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+      questState: { ...validQuestState, milestonesClaimed: [33] },
+    })],
+    ["리셋 시각 누락", JSON.stringify({
+      schemaVersion: SCHEMA_VERSION, balanceVersion: BALANCE_VERSION, savedAt: new Date().toISOString(),
+      boxer: snapshot.boxer, position: snapshot.position, isFarming: false,
+      questState: { ...validQuestState, resetAt: { daily: 1 } },
     })],
   ])("%s 저장을 invalid로 분류하고 원문을 유지한다", (_name, serialized) => {
     const storage = createMemoryStorage();
@@ -189,7 +221,7 @@ describe("v6 저장과 불러오기", () => {
     expect(storage.getItem(SAVE_KEY)).toBeNull();
   });
 
-  it("v6을 삭제해도 구버전(v5/v4/v3/v2/v1)은 보존한다", () => {
+  it("v7을 삭제해도 구버전(v6/v5/v4/v3/v2/v1)은 보존한다", () => {
     const storage = createMemoryStorage();
     for (const legacyKey of LEGACY_SAVE_KEYS) storage.setItem(legacyKey, "legacy-data");
     saveGame(snapshot, storage);

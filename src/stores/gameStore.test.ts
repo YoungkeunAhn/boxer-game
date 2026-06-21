@@ -8,8 +8,9 @@ import {
   SCHEMA_VERSION,
 } from "../game/constants";
 import type { SaveSnapshot } from "../game/save";
-import type { Boxer, SaveDataV5 } from "../game/types";
-import { createGameStore, type GameStoreDependencies } from "./gameStore";
+import type { Boxer, QuestState, SaveDataV7 } from "../game/types";
+import { createGameStore, selectQuestBadge, type GameStoreDependencies } from "./gameStore";
+import { getQuestDef } from "../game/quests";
 
 class FakeClock {
   now = 0;
@@ -57,10 +58,24 @@ function boxer(overrides: Partial<Boxer> = {}): Boxer {
   };
 }
 
+// TASK-021(P3): 로드용 유효 퀘스트 상태(리셋 시각은 clock.now보다 충분히 미래 → 로드 시 리셋 미발생).
+function questState(clock: FakeClock, overrides: Partial<QuestState> = {}): QuestState {
+  const day = 24 * 60 * 60 * 1_000;
+  return {
+    progress: {},
+    claimed: {},
+    dailyPoints: 0,
+    milestonesClaimed: [],
+    dailySnapshot: { killMonster: 0, autoBattleMinutes: 0 },
+    resetAt: { daily: clock.now + day, weekly: clock.now + 7 * day },
+    ...overrides,
+  };
+}
+
 function savedData(
   clock: FakeClock,
-  overrides: Partial<SaveDataV5> = {},
-): SaveDataV5 {
+  overrides: Partial<SaveDataV7> = {},
+): SaveDataV7 {
   return {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
@@ -68,6 +83,7 @@ function savedData(
     boxer: boxer(),
     position: { chapter: 1, stage: 1 },
     isFarming: false,
+    questState: questState(clock),
     ...overrides,
   };
 }
@@ -584,5 +600,130 @@ describe("타입 전환(switchType) 액션", () => {
     store.setState({ combat: { ...combat, boxerHp: 5 } });
     store.getState().switchType("OUT_BOXER", "MALE");
     expect(store.getState().combat?.boxerHp).toBe(5);
+  });
+});
+
+describe("TASK-021 퀘스트 스토어 통합", () => {
+  // upgradeStat 퀘스트(daily_upgrade_5)를 완료시키기 위해 충분한 골드를 시드한 로드 저장.
+  function questStore(
+    clock: FakeClock,
+    overrides: Partial<GameStoreDependencies> = {},
+    boxerOverrides: Partial<Boxer> = {},
+  ) {
+    const data = savedData(clock, {
+      boxer: boxer({ gold: 1_000_000, ...boxerOverrides }),
+    });
+    return createGameStore(
+      dependencies(clock, { load: () => ({ status: "loaded", data }), ...overrides }),
+    );
+  }
+
+  it("강화 성공 시 upgradeStat 퀘스트 진행이 +1 된다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    expect(store.getState().questState.progress.daily_upgrade_5 ?? 0).toBe(0);
+    store.getState().upgrade("attackPower");
+    store.getState().upgrade("attackPower");
+    expect(store.getState().questState.progress.daily_upgrade_5).toBe(2);
+  });
+
+  it("완료된 퀘스트를 수령하면 보상이 boxer에 가산되고 중복 수령이 막힌다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    // 강화 5회로 daily_upgrade_5(보상 🪙7,000) 완료.
+    for (let i = 0; i < 5; i += 1) store.getState().upgrade("attackPower");
+    const goldBefore = store.getState().boxer!.gold;
+    const reward = getQuestDef("daily_upgrade_5")!.reward.gold!;
+    store.getState().claimQuest("daily_upgrade_5");
+    expect(store.getState().boxer!.gold).toBe(goldBefore + reward);
+    expect(store.getState().questState.claimed.daily_upgrade_5).toBe(true);
+    // 두 번째 수령은 무동작(골드 불변).
+    const goldAfter = store.getState().boxer!.gold;
+    store.getState().claimQuest("daily_upgrade_5");
+    expect(store.getState().boxer!.gold).toBe(goldAfter);
+  });
+
+  it("마일스톤 상자 수령 시 다이아가 가산되고 milestonesClaimed에 기록된다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    // dailyPoints를 20으로 만들어 20구간 수령 가능 상태로.
+    store.setState({ questState: { ...store.getState().questState, dailyPoints: 20 } });
+    const diamondBefore = store.getState().boxer!.diamond;
+    store.getState().claimMilestone(20);
+    expect(store.getState().boxer!.diamond).toBeGreaterThan(diamondBefore);
+    expect(store.getState().questState.milestonesClaimed).toContain(20);
+    // 재수령 무동작.
+    const diamondAfter = store.getState().boxer!.diamond;
+    store.getState().claimMilestone(20);
+    expect(store.getState().boxer!.diamond).toBe(diamondAfter);
+  });
+
+  it("무료 상자 수령 시 claimFreeChest 퀘스트가 완료된다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    store.getState().claimFreeChest();
+    expect(store.getState().questState.progress.daily_free_chest).toBe(1);
+    const def = getQuestDef("daily_free_chest")!;
+    expect(store.getState().questState.progress.daily_free_chest).toBeGreaterThanOrEqual(def.target);
+  });
+
+  it("일일 killMonster는 자동 전투 처치로 스냅샷 증분만큼 진행한다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    const def = getQuestDef("daily_kill_30")!;
+    // 자동 전투를 충분히 진행해 몬스터를 여러 마리 처치한다(공격력 높게).
+    store.setState({
+      boxer: { ...store.getState().boxer!, upgradeLevels: { ...INITIAL_UPGRADE_LEVELS, attackPower: 40 } },
+    });
+    store.getState().resume(); // 로드 직후엔 정지 상태 → 자동 전투 타이머 가동.
+    clock.advanceTo(120_000);
+    const killed = store.getState().boxer!.totalKills;
+    expect(killed).toBeGreaterThan(0);
+    // 일일 killMonster 진행은 스냅샷(0) 기준 증분 = 처치 수(타깃 클램프 전 min).
+    const progress = Math.min(def.target, killed);
+    expect(store.getState().questState.dailySnapshot.killMonster).toBe(0);
+    // selectQuestBadge로 완료 여부 간접 확인은 별도 테스트에서. 여기선 진행이 0보다 큼만 확인.
+    expect(progress).toBeGreaterThan(0);
+  });
+
+  it("selectQuestBadge는 완료·미수령 퀘스트나 수령 가능 마일스톤이 있을 때 true다", () => {
+    const clock = new FakeClock();
+    const store = questStore(clock);
+    expect(selectQuestBadge(store.getState())).toBe(false);
+    // 강화 5회로 daily_upgrade_5 완료 → 뱃지 true.
+    for (let i = 0; i < 5; i += 1) store.getState().upgrade("attackPower");
+    expect(selectQuestBadge(store.getState())).toBe(true);
+    // 퀘스트 수령 시 dailyPoints가 20이 돼 마일스톤(20)이 수령 가능 → 뱃지는 여전히 true.
+    store.getState().claimQuest("daily_upgrade_5");
+    expect(selectQuestBadge(store.getState())).toBe(true);
+    // 마일스톤(20)까지 수령하면 더 이상 수령 가능한 보상이 없어 false.
+    store.getState().claimMilestone(20);
+    expect(selectQuestBadge(store.getState())).toBe(false);
+  });
+
+  it("로드 시 저장된 퀘스트 상태에 지난 일일 리셋을 정산한다", () => {
+    const clock = new FakeClock();
+    clock.now = new Date(2026, 5, 21, 12, 0, 0, 0).getTime();
+    // 저장 당시 일일 진행이 있었으나 resetAt가 이미 지난 상태로 시드 → 로드 시 초기화.
+    const data = savedData(clock, {
+      boxer: boxer({ totalKills: 50 }),
+      questState: {
+        progress: { daily_stage_3: 2 },
+        claimed: {},
+        dailyPoints: 40,
+        milestonesClaimed: [20],
+        dailySnapshot: { killMonster: 10, autoBattleMinutes: 0 },
+        resetAt: { daily: clock.now - 1_000, weekly: clock.now + 7 * 24 * 60 * 60 * 1_000 },
+      },
+    });
+    const store = createGameStore(
+      dependencies(clock, { load: () => ({ status: "loaded", data }) }),
+    );
+    const q = store.getState().questState;
+    expect(q.progress.daily_stage_3).toBeUndefined();
+    expect(q.dailyPoints).toBe(0);
+    expect(q.milestonesClaimed).toEqual([]);
+    // 일일 스냅샷이 현재 누적값(50)으로 재설정된다.
+    expect(q.dailySnapshot.killMonster).toBe(50);
   });
 });

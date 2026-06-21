@@ -5,6 +5,7 @@ import { CombatHeader } from "../components/CombatHeader";
 import { CombatPanel } from "../components/CombatPanel";
 import { BoxerCreation } from "../components/BoxerCreation";
 import { BoxerStatus } from "../components/BoxerStatus";
+import { QuestPanel } from "../components/QuestPanel";
 import { TabBar, type TabId } from "../components/TabBar";
 import { TopBar } from "../components/TopBar";
 import { TypeSwitchPanel } from "../components/TypeSwitchPanel";
@@ -124,12 +125,9 @@ export function HomePage() {
         </>
       )}
 
-      {/* 퀘스트 탭: TASK-021에서 실제 화면으로 교체. 현재는 플레이스홀더. */}
+      {/* 퀘스트 탭(TASK-021): 4탭·리스트·마일스톤 바. [이동]은 파이터 탭으로 라우팅. */}
       {activeTab === "quest" && (
-        <section className={styles.placeholder} data-testid="quest-placeholder">
-          <h2 className={styles.placeholderTitle}>퀘스트</h2>
-          <p className={styles.placeholderText}>준비 중입니다.</p>
-        </section>
+        <QuestPanel boxer={boxer} onNavigateFighter={() => setActiveTab("fighter")} />
       )}
 
       {/* TASK-020(P3): 하단 5탭 네비. 보류 탭(상점·가방·경기장)은 잠금·진입 차단(자리 유지). */}

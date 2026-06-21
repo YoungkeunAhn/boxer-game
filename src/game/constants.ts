@@ -7,6 +7,8 @@ import type {
   ComboId,
   Gender,
   Hand,
+  QuestDef,
+  QuestReward,
   SpeedMultiplier,
   UpgradeKey,
   UpgradeLevels,
@@ -224,8 +226,14 @@ export const OFFLINE_MAX_DURATION_MS = 8 * 60 * 60 * 1_000;
 //   문서 표기를 코드 정합에 맞춰 정정한다.
 //   BALANCE 6→7: 경험치 곡선 expToNext(BASE×GROWTH^level)·획득원·레벨업 보상이라는 신규 밸런스 수식 도입
 //   (다이아 자체는 순수 재화라 수식이 아니나 경험치/레벨업이 진행 밸런스에 들어가므로 BALANCE도 올린다 — 가정).
-export const SCHEMA_VERSION = 6;
-export const BALANCE_VERSION = 7;
+// TASK-021(P3 퀘스트): questState가 SaveData의 새 top-level 필드로 추가돼 저장 형태가 바뀐다 → SCHEMA 6→7,
+//   SAVE_KEY를 boxer-game.save.v7로 맞춘다(옛 v6은 LEGACY_SAVE_KEYS로 안내, 삭제 안 함).
+//   주의: 기획 문서(TASK-021/05-퀘스트)는 'TASK-019의 v7 범프에 합류'로 적혀 있으나, P2가 저장 무변경이라
+//   실제 코드 버전은 TASK-019에서 v5→v6에 머물렀다(constants.ts v6 주석 참조). 따라서 퀘스트가 실제 v6→v7 범프를
+//   가져가며 문서 표기를 코드 정합에 맞춰 정정한다(docs/ui/05-퀘스트.md 보정 노트 참조).
+//   BALANCE 7→8: 퀘스트 보상(골드·다이아)·마일스톤 보상·일일/주간 리셋이라는 신규 진행 밸런스 수식 도입.
+export const SCHEMA_VERSION = 7;
+export const BALANCE_VERSION = 8;
 export const MAX_SAFE_GAME_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export const BOXER_TYPES = ["INFIGHTER", "OUT_BOXER"] as const satisfies readonly BoxerType[];
@@ -332,6 +340,146 @@ export const LEVEL_UP_DIAMOND_REWARD = 2;
 //   가정: WebView(앱인토스) 실행 환경의 로컬 타임존 기준. UTC 고정 여부는 TASK-021 일일 리셋과 동일 기준으로 맞춘다.
 //   순수 함수(progress.ts: nextDailyResetAt)가 주입 now로부터 Date를 만들어 계산하며 Date.now는 직접 호출하지 않는다.
 export const DAILY_RESET_HOUR = 0;
+
+// === TASK-021 P3 퀘스트 시스템 (BALANCE 7→8, 가정값 — TASK-013 밸런스 확정 시 갱신) ===
+// 마일스톤 누적 점수 구간(일일 진행도 바). 누적 점수가 구간 값 이상이면 해당 상자를 수령할 수 있다.
+//   가정: 5구간 20/40/60/80/100(docs/ui/05-퀘스트.md §1 이미지). 합계 100 = 일일 만점.
+export const QUEST_MILESTONE_THRESHOLDS = [20, 40, 60, 80, 100] as const;
+// 가정: 마일스톤 구간별 보상(다이아). 진행할수록 보상 증가. 임시값(밸런스 확정 시 갱신).
+export const QUEST_MILESTONE_REWARDS: Readonly<Record<number, QuestReward>> = {
+  20: { diamond: 10 },
+  40: { diamond: 15 },
+  60: { diamond: 20 },
+  80: { diamond: 25 },
+  100: { diamond: 30 },
+};
+
+// 주간 리셋 기준 요일(0=일요일 … 1=월요일). 가정: 월요일 00:00(docs/ui/05-퀘스트.md §3-1).
+export const WEEKLY_RESET_DAY = 1;
+
+// 자동 전투 분 환산 기준(autoBattleMinutes 목표용). 1분 = 60_000ms.
+export const QUEST_AUTO_BATTLE_MS_PER_MINUTE = 60_000;
+
+// 퀘스트 정적 카탈로그(가정값 — 목표·보상·점수 모두 임시값, TASK-013 확정 시 갱신).
+//   추적 가능한 목표만 채택(stageClear/bossClear/killMonster/upgradeStat/autoBattleMinutes/claimFreeChest/playerLevelUp).
+//   제외(보류): enhanceEquip·enhanceTraining. 보상은 골드·다이아만(아이템·에너지 제외).
+//   일일 퀘스트 points 합계는 100(마일스톤 만점)에 맞춘다.
+export const QUEST_CATALOG: readonly QuestDef[] = [
+  // 일일(daily) — points 합계 100.
+  {
+    id: "daily_kill_30",
+    category: "daily",
+    goalType: "killMonster",
+    target: 30,
+    reward: { gold: 6_000 },
+    points: 20,
+    title: "몬스터 30마리 처치",
+    description: "자동 전투로 몬스터를 처치하세요.",
+  },
+  {
+    id: "daily_stage_3",
+    category: "daily",
+    goalType: "stageClear",
+    target: 3,
+    reward: { gold: 5_000 },
+    points: 20,
+    title: "스테이지 3회 클리어",
+    description: "스테이지를 전진하세요.",
+  },
+  {
+    id: "daily_upgrade_5",
+    category: "daily",
+    goalType: "upgradeStat",
+    target: 5,
+    reward: { gold: 7_000 },
+    points: 20,
+    title: "강화 5회",
+    description: "골드로 능력치를 강화하세요.",
+  },
+  {
+    id: "daily_auto_20",
+    category: "daily",
+    goalType: "autoBattleMinutes",
+    target: 20,
+    reward: { diamond: 10 },
+    points: 20,
+    title: "자동 전투 20분 진행",
+    description: "자동 전투를 진행하세요.",
+  },
+  {
+    id: "daily_free_chest",
+    category: "daily",
+    goalType: "claimFreeChest",
+    target: 1,
+    reward: { diamond: 20 },
+    points: 20,
+    title: "일일 무료 상자 받기",
+    description: "상점에서 무료 상자를 받으세요.",
+  },
+  // 주간(weekly).
+  {
+    id: "weekly_boss_5",
+    category: "weekly",
+    goalType: "bossClear",
+    target: 5,
+    reward: { diamond: 50 },
+    points: 0,
+    title: "보스 5회 클리어",
+    description: "이번 주 보스를 5회 격파하세요.",
+  },
+  {
+    id: "weekly_kill_500",
+    category: "weekly",
+    goalType: "killMonster",
+    target: 500,
+    reward: { gold: 50_000 },
+    points: 0,
+    title: "몬스터 500마리 처치",
+    description: "이번 주 누적 처치를 달성하세요.",
+  },
+  // 도전(challenge) — 영구(비리셋).
+  {
+    id: "challenge_levelup_10",
+    category: "challenge",
+    goalType: "playerLevelUp",
+    target: 10,
+    reward: { diamond: 30 },
+    points: 0,
+    title: "플레이어 레벨 10 달성",
+    description: "플레이어 레벨을 올리세요.",
+  },
+  {
+    id: "challenge_upgrade_50",
+    category: "challenge",
+    goalType: "upgradeStat",
+    target: 50,
+    reward: { gold: 30_000 },
+    points: 0,
+    title: "강화 50회",
+    description: "강화를 누적하세요.",
+  },
+  // 업적(achievement) — 영구(비리셋).
+  {
+    id: "achievement_kill_1000",
+    category: "achievement",
+    goalType: "killMonster",
+    target: 1_000,
+    reward: { diamond: 100 },
+    points: 0,
+    title: "몬스터 1,000마리 처치",
+    description: "누적 처치 기록을 세우세요.",
+  },
+  {
+    id: "achievement_boss_20",
+    category: "achievement",
+    goalType: "bossClear",
+    target: 20,
+    reward: { diamond: 150 },
+    points: 0,
+    title: "보스 20회 격파",
+    description: "보스를 누적 격파하세요.",
+  },
+] as const;
 
 export const BOXER_TYPE_MODIFIERS: Readonly<Record<BoxerType, BoxerTypeModifiers>> = {
   INFIGHTER: {

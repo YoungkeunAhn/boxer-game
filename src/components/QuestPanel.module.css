@@ -1,0 +1,266 @@
+.panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: rgba(23, 28, 40, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #f6bb43;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+/* 카테고리 탭 */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.tab {
+  flex: 1 1 0;
+  min-height: 40px;
+  padding: 8px 6px;
+  border: 1px solid #3d4351;
+  border-radius: 10px;
+  color: #aeb5c4;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.tabActive {
+  border-color: #f6bb43;
+  color: #15130d;
+  background: #f6bb43;
+}
+
+/* 마일스톤 진행 바 */
+.milestone {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(13, 17, 26, 0.6);
+}
+
+.milestoneHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #d9dde6;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.milestoneTimer {
+  margin-left: auto;
+  color: #9fa7b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.milestoneTrack {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.milestoneFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f6bb43, #ffd87a);
+  transition: width 0.25s ease;
+}
+
+.milestoneBoxes {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.milestoneBox {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid #3d4351;
+  border-radius: 10px;
+  color: #aeb5c4;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.milestoneBox[data-state="claimed"] {
+  color: #5bbe8d;
+  border-color: rgba(91, 190, 141, 0.4);
+}
+
+.milestoneBox:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.milestoneBoxReady {
+  border-color: #f6bb43;
+  color: #f6bb43;
+  box-shadow: 0 0 0 1px rgba(246, 187, 67, 0.4);
+  opacity: 1;
+}
+
+.milestoneValue {
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.milestoneIcon {
+  font-size: 0.95rem;
+}
+
+/* 퀘스트 리스트 */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(13, 17, 26, 0.5);
+}
+
+.row[data-complete] {
+  border-color: rgba(246, 187, 67, 0.4);
+}
+
+.rowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rowTitle {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #eef1f6;
+  overflow-wrap: anywhere;
+}
+
+.rowReward {
+  color: #f6bb43;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rowDesc {
+  margin: 4px 0 8px;
+  color: #9fa7b8;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.rowProgress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progressTrack {
+  flex: 1 1 auto;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: #5b8def;
+  transition: width 0.25s ease;
+}
+
+.progressText {
+  color: #c5cbd6;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rowButton {
+  flex: 0 0 auto;
+  min-width: 62px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #3d4351;
+  border-radius: 10px;
+  color: #d9dde6;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.rowButton[data-state="claim"] {
+  border-color: #f6bb43;
+  color: #15130d;
+  background: #f6bb43;
+}
+
+.rowButton[data-state="done"] {
+  color: #5bbe8d;
+  border-color: rgba(91, 190, 141, 0.4);
+  cursor: default;
+}
+
+.footnote {
+  margin: 14px 0 0;
+  color: #7e8696;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}

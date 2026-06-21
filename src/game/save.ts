@@ -1,20 +1,29 @@
 import { getStageDefinition } from "../data/stages";
-import { BALANCE_VERSION, BOXER_TYPES, GENDERS, SCHEMA_VERSION, UPGRADE_MAX_LEVELS } from "./constants";
+import {
+  BALANCE_VERSION,
+  BOXER_TYPES,
+  GENDERS,
+  QUEST_MILESTONE_THRESHOLDS,
+  SCHEMA_VERSION,
+  UPGRADE_MAX_LEVELS,
+} from "./constants";
 import type {
   Boxer,
   BoxerType,
   Gender,
-  SaveDataV6,
+  QuestState,
+  SaveDataV7,
   StagePosition,
   UpgradeKey,
   UpgradeLevels,
 } from "./types";
 
-export const SAVE_KEY = "boxer-game.save.v6";
-// 가정: 재화·레벨(v5) 또는 그 이전(v4/v3/v2/v1) 저장은 자동 마이그레이션하지 않고 삭제·덮어쓰기 없이
-// legacy로만 안내한다. 마이그레이션을 택한다면 누락 필드(diamond/playerLevel/playerExp 등)에 초기값을
-// 부여해 v6으로 승격하는 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다(tasks/README 공통 규칙).
+export const SAVE_KEY = "boxer-game.save.v7";
+// 가정: 재화·레벨(v6) 또는 그 이전(v5/v4/v3/v2/v1) 저장은 자동 마이그레이션하지 않고 삭제·덮어쓰기 없이
+// legacy로만 안내한다. 마이그레이션을 택한다면 누락 필드(questState 등)에 초기값을 부여해 v7로 승격하는
+// 방안이 가능하지만, 개발 중 스키마 변동이 잦아 새 게임 진입을 기본으로 둔다(tasks/README 공통 규칙).
 export const LEGACY_SAVE_KEYS = [
+  "boxer-game.save.v6",
   "boxer-game.save.v5",
   "boxer-game.save.v4",
   "boxer-game.save.v3",
@@ -32,10 +41,12 @@ export type SaveSnapshot = {
   boxer: Boxer;
   position: StagePosition;
   isFarming: boolean;
+  // TASK-021(P3): 퀘스트 진행 상태(저장 대상). 미존재 저장(레거시)이나 로드 중 누락은 isQuestState로 거부한다.
+  questState: QuestState;
 };
 
 export type LoadGameResult =
-  | { status: "loaded"; data: SaveDataV6 }
+  | { status: "loaded"; data: SaveDataV7 }
   | { status: "empty" }
   | { status: "legacy" }
   | { status: "invalid" }
@@ -129,7 +140,50 @@ function isStagePosition(value: unknown): value is StagePosition {
   }
 }
 
-function isSaveData(value: unknown): value is SaveDataV6 {
+function isNonNegIntRecord(value: unknown): value is Record<string, number> {
+  if (typeof value !== "object" || value === null) return false;
+  return Object.values(value as Record<string, unknown>).every(isSafeNonNegativeInteger);
+}
+
+function isBooleanRecord(value: unknown): value is Record<string, boolean> {
+  if (typeof value !== "object" || value === null) return false;
+  return Object.values(value as Record<string, unknown>).every((v) => typeof v === "boolean");
+}
+
+// TASK-021(P3): 퀘스트 상태 타입가드. 누락/형 불일치/NaN/음수는 거부(로드 시 invalid).
+function isQuestState(value: unknown): value is QuestState {
+  if (typeof value !== "object" || value === null) return false;
+  const q = value as Record<string, unknown>;
+  if (!isNonNegIntRecord(q.progress)) return false;
+  if (!isBooleanRecord(q.claimed)) return false;
+  if (!isSafeNonNegativeInteger(q.dailyPoints)) return false;
+  if (
+    !Array.isArray(q.milestonesClaimed) ||
+    !q.milestonesClaimed.every(
+      (m) => isSafeNonNegativeInteger(m) && (QUEST_MILESTONE_THRESHOLDS as readonly number[]).includes(m),
+    )
+  ) {
+    return false;
+  }
+  const snapshot = q.dailySnapshot as Record<string, unknown> | undefined;
+  if (
+    typeof snapshot !== "object" ||
+    snapshot === null ||
+    !isSafeNonNegativeInteger(snapshot.killMonster) ||
+    !isSafeNonNegativeInteger(snapshot.autoBattleMinutes)
+  ) {
+    return false;
+  }
+  const resetAt = q.resetAt as Record<string, unknown> | undefined;
+  return (
+    typeof resetAt === "object" &&
+    resetAt !== null &&
+    isSafeNonNegativeInteger(resetAt.daily) &&
+    isSafeNonNegativeInteger(resetAt.weekly)
+  );
+}
+
+function isSaveData(value: unknown): value is SaveDataV7 {
   if (typeof value !== "object" || value === null) return false;
   const save = value as Record<string, unknown>;
   return (
@@ -140,7 +194,8 @@ function isSaveData(value: unknown): value is SaveDataV6 {
     isBoxer(save.boxer) &&
     isStagePosition(save.position) &&
     typeof save.isFarming === "boolean" &&
-    (!save.isFarming || save.position.stage === 4)
+    (!save.isFarming || (save.position as StagePosition).stage === 4) &&
+    isQuestState(save.questState)
   );
 }
 
@@ -154,18 +209,20 @@ export function saveGame(
     !isBoxer(snapshot.boxer) ||
     !isStagePosition(snapshot.position) ||
     typeof snapshot.isFarming !== "boolean" ||
-    (snapshot.isFarming && snapshot.position.stage !== 4)
+    (snapshot.isFarming && snapshot.position.stage !== 4) ||
+    !isQuestState(snapshot.questState)
   ) {
     return false;
   }
 
-  const data: SaveDataV6 = {
+  const data: SaveDataV7 = {
     schemaVersion: SCHEMA_VERSION,
     balanceVersion: BALANCE_VERSION,
     savedAt: now.toISOString(),
     boxer: snapshot.boxer,
     position: snapshot.position,
     isFarming: snapshot.isFarming,
+    questState: snapshot.questState,
   };
 
   try {

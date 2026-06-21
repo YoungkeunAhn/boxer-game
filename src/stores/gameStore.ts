@@ -36,6 +36,17 @@ import {
 } from "../game/formulas";
 import { dailyResetRemainingMs } from "../game/progress";
 import { getNextStagePosition } from "../data/stages";
+import {
+  addQuestProgress,
+  applyQuestResets,
+  claimMilestone as claimMilestonePure,
+  claimQuest as claimQuestPure,
+  createInitialQuestState,
+  hasClaimableQuest,
+  type QuestCumulativeSource,
+} from "../game/quests";
+import { addDiamondToBoxer } from "../game/formulas";
+import { QUEST_AUTO_BATTLE_MS_PER_MINUTE } from "../game/constants";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
 import type {
   AutoMode,
@@ -46,6 +57,8 @@ import type {
   GameState,
   Gender,
   MonsterAttackResult,
+  QuestReward,
+  QuestState,
   SpeedMultiplier,
   UpgradeKey,
 } from "../game/types";
@@ -67,6 +80,10 @@ type GameActions = {
   // TASK-020(P3): 주입 now(실시간 epoch ms) 읽기. 상단 바의 일일 리셋 타이머 표시 파생 전용 —
   //   UI가 Date.now를 직접 호출하지 않고 주입된 시계에서 읽도록 한다(프로젝트 규칙·E2E 가짜 클럭 정합).
   getNow: () => number;
+  // TASK-021(P3): 퀘스트 수령·마일스톤 수령·무료 상자(상점 골격) 이벤트.
+  claimQuest: (questId: string) => void;
+  claimMilestone: (threshold: number) => void;
+  claimFreeChest: () => void;
 };
 
 export type GameStore = GameState & GameActions;
@@ -88,6 +105,14 @@ const SAVE_FAILED_WARNING =
 const RESET_FAILED_WARNING = "저장 데이터 삭제에 실패해 현재 진행을 유지했습니다.";
 const SAVE_THROTTLE_MS = 1_000;
 
+// TASK-021(P3): boxer 누적값(현재는 처치 수)에서 퀘스트 누적 소스를 만든다.
+function questSourceFromBoxer(boxer: Boxer | null): QuestCumulativeSource {
+  return { killMonster: boxer ? boxer.totalKills : 0 };
+}
+
+// TASK-021(P3): now=0 기준 placeholder 퀘스트 상태(boxer 없을 때/리셋용). 실제 now는 init/createBoxer에서 주입.
+const EMPTY_QUEST_STATE: QuestState = createInitialQuestState(0, { killMonster: 0 });
+
 const EMPTY_STATE: GameState = {
   boxer: null,
   combat: null,
@@ -105,6 +130,8 @@ const EMPTY_STATE: GameState = {
   // TASK-015: 전투 컨트롤 기본값(휘발 UI 상태). AUTO·x1.
   autoMode: DEFAULT_AUTO_MODE,
   speedMultiplier: DEFAULT_SPEED_MULTIPLIER,
+  // TASK-021(P3): 퀘스트 초기 상태(placeholder). 실제 리셋 시각은 init/createBoxer에서 now로 갱신.
+  questState: EMPTY_QUEST_STATE,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -137,6 +164,14 @@ function getInitialState(result: LoadGameResult, now: number): InitialStoreState
     const savedAtBoss = getStageDefinition(result.data.position).isBoss;
     const isFarming = result.data.isFarming || savedAtBoss;
     const combat = createCombatRuntime(offline.boxer, offline.position, now, isFarming);
+    // TASK-021(P3): 저장된 퀘스트 상태에 지난(오프라인 포함) 일일/주간 리셋을 주입 now로 정산한다.
+    //   가정: 오프라인 처치(offline.boxer.totalKills 증가)는 일일 killMonster 증분에 반영되지 않게,
+    //   리셋이 일어났다면 스냅샷이 현재 누적값으로 재설정된다(방치 자동 달성 방지 — 가정).
+    const questState = applyQuestResets(
+      result.data.questState,
+      now,
+      questSourceFromBoxer(offline.boxer),
+    );
     return {
       savedAt,
       shouldPersistOffline: savedAt !== now,
@@ -144,6 +179,7 @@ function getInitialState(result: LoadGameResult, now: number): InitialStoreState
         ...EMPTY_STATE,
         boxer: offline.boxer,
         combat,
+        questState,
         offlineSummary: elapsedMs > 0 ? offline : null,
         message: "저장된 복서를 불러왔습니다.",
         bossRemainingMs: getBossRemainingMs(combat, now),
@@ -194,6 +230,11 @@ export function createGameStore(
   let shouldPersistOffline = initial.shouldPersistOffline;
   // TASK-017: 마지막 타입 전환 게임시각(휘발 클로저 변수, 저장 안 함). 쿨다운 악용 방지 판정에만 쓴다.
   let lastTypeSwitchAt: number | null = null;
+  // TASK-021(P3): 자동 전투 누적 게임시간(ms) 중 아직 분으로 환산해 퀘스트에 반영하지 않은 잔여분.
+  //   온라인 진행만 집계한다(오프라인 정산은 별도 — 가정: 방치 자동 달성 방지). 휘발 클로저(분 단위로만 progress에 반영).
+  let autoBattleRemainderMs = 0;
+  // advanceCombat 직전 게임시각(자동 전투 경과 측정 기준). 진행 호출 사이의 게임시간 델타를 분으로 환산한다.
+  let lastAdvanceGameAt = initialNow;
 
   // TASK-015: "게임 시간" 시계. combat의 모든 *At 필드는 게임 시간 기준이다.
   //  - 실시간(dependencies.now): 저장·throttle·pause/오프라인 정산용.
@@ -228,6 +269,8 @@ export function createGameStore(
           boxer: state.boxer,
           position: state.combat.position,
           isFarming: state.combat.isFarming,
+          // TASK-021(P3): 퀘스트 진행 상태도 함께 저장한다(v7 top-level 필드).
+          questState: state.questState,
         },
         new Date(now),
       );
@@ -249,6 +292,14 @@ export function createGameStore(
       let bossTimedOut = false;
       let bossDefeated = false;
       let knockedDown = false;
+      // TASK-021(P3): 이번 진행에서 발생한 퀘스트 이벤트 카운트.
+      let stageClears = 0;
+      let bossClears = 0;
+      const startPlayerLevel = boxer.playerLevel;
+      const startTotalKills = boxer.totalKills;
+      // 자동 전투 누적 분: 이번 호출까지 흐른 게임시간 델타를 잔여 ms에 더해 분으로 환산한다(온라인 한정 — 가정).
+      const advanceDeltaMs = Math.max(0, now - lastAdvanceGameAt);
+      lastAdvanceGameAt = now;
 
       // 복서 공격·몬스터 공격·보스 타임아웃 중 now까지 도달한 이벤트를 시간순으로 인터리브한다.
       // eslint-disable-next-line no-constant-condition
@@ -271,6 +322,7 @@ export function createGameStore(
         }
 
         const attackedStageWasBoss = getStageDefinition(combat.position).isBoss;
+        const wasFarming = combat.isFarming;
         const step = stepCombat(boxer, combat, dependencies.random(), now);
         boxer = step.boxer;
         combat = step.combat;
@@ -279,6 +331,9 @@ export function createGameStore(
           killed ||= step.attack.killed;
           const stageBossDefeated = attackedStageWasBoss && step.attack.killed;
           bossDefeated ||= stageBossDefeated;
+          // TASK-021(P3): 퀘스트 카운트. 보스 처치=bossClear, 일반 스테이지 전진(파밍 아님)=stageClear.
+          if (stageBossDefeated) bossClears += 1;
+          else if (step.attack.killed && !attackedStageWasBoss && !wasFarming) stageClears += 1;
           // TASK-019(P3): 처치 시 플레이어 경험치 가산(보스 클리어는 보스 보상, 일반 처치는 킬 보상).
           //   레벨업 정산·다이아 보상은 addExpToBoxer 내부에서 순수 처리된다(가정값 — constants.ts).
           if (step.attack.killed) {
@@ -300,9 +355,30 @@ export function createGameStore(
         }
       }
 
+      // TASK-021(P3): 퀘스트 진행 정산(리셋 → 이벤트 진행 누적). 보상 가산은 수령(claim) 시점에 한다.
+      //   - 일일/주간 리셋을 주입 now로 정산(killMonster는 totalKills 스냅샷 증분으로 자동 반영).
+      //   - 스테이지/보스/레벨업: 이번 진행에서 발생한 카운트만큼 progress 증가.
+      //   - 자동 전투 분: 게임시간 델타를 분으로 환산해 누적(온라인 한정 — 가정).
+      let questState = applyQuestResets(get().questState, now, questSourceFromBoxer(boxer));
+      if (stageClears > 0) questState = addQuestProgress(questState, "stageClear", stageClears);
+      if (bossClears > 0) questState = addQuestProgress(questState, "bossClear", bossClears);
+      const levelGains = Math.max(0, boxer.playerLevel - startPlayerLevel);
+      if (levelGains > 0) questState = addQuestProgress(questState, "playerLevelUp", levelGains);
+      // 비일일 killMonster(주간/도전/업적)는 progress 누적형이므로 이번 처치 수만큼 직접 증가시킨다.
+      //   일일 killMonster는 스냅샷 증분이라 addQuestProgress가 isCumulativeGoal로 건너뛴다.
+      const killsThisTick = Math.max(0, boxer.totalKills - startTotalKills);
+      if (killsThisTick > 0) questState = addQuestProgress(questState, "killMonster", killsThisTick);
+      autoBattleRemainderMs += advanceDeltaMs;
+      const minutes = Math.floor(autoBattleRemainderMs / QUEST_AUTO_BATTLE_MS_PER_MINUTE);
+      if (minutes > 0) {
+        autoBattleRemainderMs -= minutes * QUEST_AUTO_BATTLE_MS_PER_MINUTE;
+        questState = addQuestProgress(questState, "autoBattleMinutes", minutes);
+      }
+
       set({
         boxer,
         combat,
+        questState,
         lastAttack,
         recentDefense,
         // v1.3b: 콤보 연출 상태를 노출(combat 런타임 필드에서 파생). 로직 추가 없이 표시용.
@@ -359,10 +435,14 @@ export function createGameStore(
         const combat = createCombatRuntime(boxer, { chapter: 1, stage: 1 }, now);
         pausedAt = null;
         shouldPersistOffline = false;
+        // TASK-021(P3): 새 복서의 퀘스트 상태를 now 기준으로 초기화하고 자동 전투 측정 기준을 맞춘다.
+        autoBattleRemainderMs = 0;
+        lastAdvanceGameAt = now;
         set({
           ...EMPTY_STATE,
           boxer,
           combat,
+          questState: createInitialQuestState(now, questSourceFromBoxer(boxer)),
           message: "첫 몬스터를 향한 자동 공격을 시작합니다.",
           isRunning: true,
           bossRemainingMs: getBossRemainingMs(combat, now),
@@ -383,6 +463,9 @@ export function createGameStore(
         const boxerHp = Math.min(stats.maxHp, state.combat.boxerHp + hpDelta);
         // 변경된 공격 속도를 반영해 4종 공격 쿨타임을 now 기준으로 재설정한다(가정: 콤보 진행 초기화).
         const rescheduled = rescheduleAttacks(state.combat, stats.attackSpeed, now);
+        // TASK-021(P3): 강화 성공 1회 = upgradeStat 퀘스트 +1(리셋 정산 후 진행).
+        let questState = applyQuestResets(state.questState, now, questSourceFromBoxer(result.boxer));
+        questState = addQuestProgress(questState, "upgradeStat", 1);
         set({
           boxer: result.boxer,
           combat: {
@@ -390,6 +473,7 @@ export function createGameStore(
             boxerHp,
             boxerMaxHp: stats.maxHp,
           },
+          questState,
           message: `강화 완료! ${result.cost.toLocaleString()} 골드를 사용했습니다.`,
         });
         persist(true);
@@ -480,6 +564,8 @@ export function createGameStore(
         pausedAt = null;
         lastSavedAt = 0;
         shouldPersistOffline = false;
+        // TASK-021(P3): 자동 전투 측정 클로저도 초기화(다음 새 복서 생성 시 createBoxer에서 now 기준 재설정).
+        autoBattleRemainderMs = 0;
         set({ ...EMPTY_STATE });
       },
 
@@ -571,9 +657,21 @@ export function createGameStore(
           nextCombat = createCombatRuntime(nextBoxer, getNextStagePosition(combat.position), now);
         }
 
+        // TASK-021(P3): 수동 피니시도 퀘스트 진행에 반영(advanceCombat을 거치지 않는 경로).
+        let questState = applyQuestResets(state.questState, now, questSourceFromBoxer(nextBoxer));
+        if (killed) {
+          if (bossDefeated) questState = addQuestProgress(questState, "bossClear", 1);
+          else if (!combat.isFarming) questState = addQuestProgress(questState, "stageClear", 1);
+          const killsDelta = Math.max(0, nextBoxer.totalKills - boxer.totalKills);
+          if (killsDelta > 0) questState = addQuestProgress(questState, "killMonster", killsDelta);
+          const levelGains = Math.max(0, nextBoxer.playerLevel - boxer.playerLevel);
+          if (levelGains > 0) questState = addQuestProgress(questState, "playerLevelUp", levelGains);
+        }
+
         set({
           boxer: nextBoxer,
           combat: nextCombat,
+          questState,
           lastAttack: {
             stageId: stage.id,
             damage,
@@ -632,8 +730,64 @@ export function createGameStore(
       },
       // TASK-020(P3): 주입 now 노출(표시 전용). 게임 상태 변경 없음 — 상단 바 일일 타이머 1초 갱신용.
       getNow: () => dependencies.now(),
+
+      // TASK-021(P3): 퀘스트 보상 수령. 완료·미수령일 때만 보상(골드·다이아)을 boxer에 가산하고 강제 저장.
+      claimQuest: (questId) => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        const now = syncGameNow();
+        const reset = applyQuestResets(state.questState, now, questSourceFromBoxer(state.boxer));
+        const result = claimQuestPure(reset, questId, questSourceFromBoxer(state.boxer));
+        if (!result.claimed) {
+          if (reset !== state.questState) set({ questState: reset });
+          return;
+        }
+        const boxer = applyRewardToBoxer(state.boxer, result.reward);
+        set({ boxer, questState: result.state, message: "퀘스트 보상을 받았습니다." });
+        persist(true);
+      },
+
+      // TASK-021(P3): 마일스톤 상자 수령(구간별 별도). 점수 도달·미수령일 때만 보상 가산 + 강제 저장.
+      claimMilestone: (threshold) => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        const now = syncGameNow();
+        const reset = applyQuestResets(state.questState, now, questSourceFromBoxer(state.boxer));
+        const result = claimMilestonePure(reset, threshold);
+        if (!result.claimed) {
+          if (reset !== state.questState) set({ questState: reset });
+          return;
+        }
+        const boxer = applyRewardToBoxer(state.boxer, result.reward);
+        set({ boxer, questState: result.state, message: "마일스톤 상자를 받았습니다." });
+        persist(true);
+      },
+
+      // TASK-021(P3): 무료 상자 수령(상점 골격). 상점(TASK-023) 도입 전까지 퀘스트 진행만 +1(claimFreeChest).
+      //   TODO(TASK-023): 무료 상자 실제 보상·일일 1회 제한을 상점 상태와 연결한다.
+      claimFreeChest: () => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        const now = syncGameNow();
+        let questState = applyQuestResets(state.questState, now, questSourceFromBoxer(state.boxer));
+        questState = addQuestProgress(questState, "claimFreeChest", 1);
+        set({ questState, message: "무료 상자를 받았습니다." });
+        persist(true);
+      },
     };
   });
+}
+
+// TASK-021(P3): 퀘스트/마일스톤 보상(골드·다이아만)을 boxer에 가산한다(순수 — 새 Boxer 반환).
+function applyRewardToBoxer(boxer: Boxer, reward: QuestReward): Boxer {
+  let next = boxer;
+  if (reward.gold && reward.gold > 0) {
+    next = { ...next, gold: Math.min(MAX_SAFE_GAME_INTEGER, next.gold + Math.floor(reward.gold)) };
+  }
+  if (reward.diamond && reward.diamond > 0) {
+    next = addDiamondToBoxer(next, reward.diamond);
+  }
+  return next;
 }
 
 export const useGameStore = createGameStore();
@@ -668,7 +822,8 @@ export function selectShopBadge(_state: GameState): boolean {
   return false;
 }
 
-export function selectQuestBadge(_state: GameState): boolean {
-  // TODO(TASK-021): 퀘스트 완료·마일스톤 수령 가능 여부 backing state 연결.
-  return false;
+export function selectQuestBadge(state: GameState): boolean {
+  // TASK-021(P3): 완료·미수령 퀘스트 또는 수령 가능한 마일스톤이 하나라도 있으면 뱃지 표시.
+  if (!state.boxer) return false;
+  return hasClaimableQuest(state.questState, { killMonster: state.boxer.totalKills });
 }
