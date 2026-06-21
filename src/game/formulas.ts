@@ -64,7 +64,7 @@ export function calculateCombatStats(
   Object.values(levels).forEach(assertLevel);
 
   const modifiers = BOXER_TYPE_MODIFIERS[boxerType];
-  // 가정: maxHp/defense = floor((기본 + 레벨×레벨당) × 타입 배율).
+  // 확정(BALANCE 8): maxHp/defense = floor((기본 + 레벨×레벨당) × 타입 배율).
   const maxHp = toSafeInteger(
     (INITIAL_COMBAT_STATS.maxHp + levels.maxHp * MAX_HP_PER_LEVEL) *
       modifiers.maxHpMultiplier,
@@ -73,7 +73,7 @@ export function calculateCombatStats(
     (INITIAL_COMBAT_STATS.defense + levels.defense * DEFENSE_PER_LEVEL) *
       modifiers.defenseMultiplier,
   );
-  // 가정: dodge = min(CAP, max(0, (기본 + 레벨×레벨당) × 회피 배율)).
+  // 확정(BALANCE 8): dodge = min(CAP, max(0, (기본 + 레벨×레벨당) × 회피 배율)).
   const dodge = Math.min(
     DODGE_RATE_CAP,
     Math.max(
@@ -82,7 +82,7 @@ export function calculateCombatStats(
         modifiers.evasionMultiplier,
     ),
   );
-  // 가정: counter = min(CAP, max(0, (기본 + 레벨×레벨당) × 카운터 배율)).
+  // 확정(BALANCE 8): counter = min(CAP, max(0, (기본 + 레벨×레벨당) × 카운터 배율)).
   const counter = Math.min(
     COUNTER_RATE_CAP,
     Math.max(
@@ -107,7 +107,7 @@ export function calculateCombatStats(
   };
 }
 
-// 가정: 방어 → 피해감소율. defense/(defense+K)를 0~CAP로 클램프.
+// 확정(BALANCE 8): 방어 → 피해감소율. defense/(defense+K)를 0~CAP로 클램프.
 export function calculateDamageReduction(defense: number): number {
   if (!Number.isFinite(defense) || defense < 0) {
     throw new RangeError("방어는 0 이상의 유한한 수여야 합니다.");
@@ -116,7 +116,7 @@ export function calculateDamageReduction(defense: number): number {
   return Math.min(DEFENSE_DAMAGE_REDUCTION_CAP, Math.max(0, raw));
 }
 
-// 가정: 받는 피해 = max(1, floor(공격력 × (1 - 피해감소율))).
+// 확정(BALANCE 8): 받는 피해 = max(1, floor(공격력 × (1 - 피해감소율))).
 export function calculateIncomingDamage(
   monsterAttackPower: number,
   defense: number,
@@ -128,15 +128,21 @@ export function calculateIncomingDamage(
   return Math.max(1, toSafeInteger(monsterAttackPower * (1 - reduction)));
 }
 
-// v1.2b 가정: 가드 적용 피해. 합산 감소율 = min(TOTAL_CAP, 방어감소 + GUARD_DAMAGE_REDUCTION×타입 배율).
+// v1.2b 확정(BALANCE 8): 가드 적용 피해. 합산 감소율 = min(TOTAL_CAP, 방어감소 + GUARD_DAMAGE_REDUCTION×타입 배율 + 패시브감소).
 //   받는 피해 = max(1, floor(공격력 × (1 - 합산 감소율))). guarded = 가드 감소가 0보다 큼(GUARD/HIT 경계).
+// v1.3d(TASK-010) 확정: passiveReduction(철벽가드 등)을 합산에 더한 뒤 동일 TOTAL_CAP(0.9)로 클램프한다.
+//   캡 적용 순서: (방어 + 가드 + 패시브)를 합산 → TOTAL_CAP로 클램프. 패시브만으로 캡을 넘기면 캡이 우선한다.
 export function calculateGuardedDamage(
   monsterAttackPower: number,
   defense: number,
   boxerType: BoxerType = DEFAULT_BOXER_TYPE,
+  passiveReduction = 0,
 ): { damage: number; guarded: boolean } {
   if (!Number.isFinite(monsterAttackPower) || monsterAttackPower < 0) {
     throw new RangeError("몬스터 공격력은 0 이상의 유한한 수여야 합니다.");
+  }
+  if (!Number.isFinite(passiveReduction) || passiveReduction < 0) {
+    throw new RangeError("패시브 피해감소율은 0 이상의 유한한 수여야 합니다.");
   }
   const modifiers = BOXER_TYPE_MODIFIERS[boxerType];
   const defenseReduction = calculateDamageReduction(defense);
@@ -146,13 +152,14 @@ export function calculateGuardedDamage(
   );
   const totalReduction = Math.min(
     GUARD_DAMAGE_REDUCTION_TOTAL_CAP,
-    Math.max(0, defenseReduction + guardReduction),
+    Math.max(0, defenseReduction + guardReduction + passiveReduction),
   );
   const damage = Math.max(1, toSafeInteger(monsterAttackPower * (1 - totalReduction)));
+  // guarded는 가드(타입 가드 감소)가 작동했는지로 본다. 패시브만 있고 가드가 0이면 HIT(연출 일관성).
   return { damage, guarded: guardReduction > 0 };
 }
 
-// v1.2b 가정: 카운터 데미지 = max(1, floor(기대 타격 피해 × counter 계수 × rate)).
+// v1.2b 확정(BALANCE 8): 카운터 데미지 = max(1, floor(기대 타격 피해 × counter 계수 × rate)).
 export function calculateCounterDamage(
   stats: CombatStats,
   rate: number = COUNTER_BASE_DAMAGE_RATE,
@@ -164,7 +171,7 @@ export function calculateCounterDamage(
   return Math.max(1, toSafeInteger(expected * stats.counter * rate));
 }
 
-// 가정: 스테이지별 몬스터 공격력. 기본 공격력 × 장 배율^(chapter-1) × 스테이지 배율.
+// 확정(BALANCE 8): 스테이지별 몬스터 공격력. 기본 공격력 × 장 배율^(chapter-1) × 스테이지 배율.
 export function calculateMonsterAttackPower(position: StagePosition): number {
   if (
     !Number.isSafeInteger(position.chapter) ||

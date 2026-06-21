@@ -1,10 +1,17 @@
-.panel {
+.panel,
+.topPanel,
+.combatPanel {
   min-width: 0;
   padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   background: rgba(23, 28, 40, 0.9);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+}
+
+/* 중앙 전투 패널: 게임 화면 느낌을 위해 살짝 더 진한 배경. */
+.combatPanel {
+  background: linear-gradient(180deg, rgba(28, 34, 48, 0.95), rgba(18, 22, 32, 0.95));
 }
 
 .headingRow {
@@ -281,8 +288,418 @@
   overflow-wrap: anywhere;
 }
 
+/* === 상단 패널: 스테이지 메타 === */
+.topMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.topMetaItem {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 11px;
+  border-radius: 12px;
+  background: #10141d;
+}
+
+.topMetaItem span {
+  color: #8992a6;
+  font-size: 0.74rem;
+}
+
+.topMetaItem strong {
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+/* === 중앙 전투: 복서 좌 · 몬스터 우 === */
+.arena {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 120%, rgba(246, 187, 67, 0.12), transparent 60%), #0c1019;
+}
+
+.fighter {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar {
+  display: flex;
+  width: 64px;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.avatarBoxer {
+  background: rgba(91, 162, 246, 0.18);
+}
+
+.avatarMonster {
+  background: rgba(218, 85, 59, 0.18);
+}
+
+.avatarGroggy {
+  background: rgba(246, 187, 67, 0.3);
+}
+
+.fighterName {
+  color: #abb3c5;
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.versus {
+  flex: 0 0 auto;
+  color: #6f7892;
+  font-size: 0.9rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.boxerHpFill {
+  background: linear-gradient(90deg, #2f80ed, #56ccf2);
+}
+
+.groggyFill {
+  background: linear-gradient(90deg, #b78a2e, #f6bb43);
+}
+
+.groggyActive {
+  background: linear-gradient(90deg, #f6bb43, #ffe39a);
+}
+
+/* === 전투 피드: 데미지·콤보·스킬명·MISS/GUARD/COUNTER === */
+.feed {
+  display: flex;
+  min-height: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.feedDamage,
+.feedCombo,
+.feedSkill,
+.feedDefense {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.feedDamage {
+  color: #ff866e;
+  background: rgba(218, 85, 59, 0.16);
+}
+
+.feedCombo {
+  color: #f7d789;
+  background: rgba(246, 187, 67, 0.16);
+}
+
+.feedSkill {
+  color: #9bd0ff;
+  background: rgba(47, 128, 237, 0.16);
+}
+
+.feedDefense {
+  color: #bdebd2;
+  background: rgba(49, 137, 92, 0.18);
+}
+
+/* === 하단 기본 공격 쿨타임 === */
+.cooldownList {
+  display: grid;
+  gap: 10px;
+}
+
+.cooldownRow {
+  display: grid;
+  gap: 6px;
+}
+
+.cooldownLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #abb3c5;
+  font-size: 0.82rem;
+}
+
+.cooldownLabel strong {
+  color: #f3f5f9;
+}
+
+.cooldownTrack {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 99px;
+  background: #0b0e15;
+}
+
+.cooldownFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5f6f8c, #98a7c4);
+  transition: width 130ms linear;
+}
+
+.cooldownReady {
+  background: linear-gradient(90deg, #ed9f27, #ffd66f);
+}
+
+/* === 강화 그룹 라벨 === */
+.groupLabel {
+  margin: 14px 0 8px;
+  color: #8992a6;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.groupLabel:first-of-type {
+  margin-top: 4px;
+}
+
+.passiveButtons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* === TASK-012 타입 톤·애니메이션 (표시 계층 전용) === */
+
+/* 타입 톤: arena가 transform으로 흔들려도 가로 스크롤이 생기지 않도록 overflow를 가둔다. */
+.combatPanel {
+  overflow: hidden;
+}
+
+/* 인파이터 톤: 묵직한 붉은 압박감(아레나 배경에 붉은 비네팅 가미). */
+.toneInfighter .arena {
+  background:
+    radial-gradient(circle at 18% 30%, rgba(218, 85, 59, 0.22), transparent 55%),
+    radial-gradient(circle at 50% 120%, rgba(246, 187, 67, 0.12), transparent 60%),
+    #0c1019;
+  box-shadow: inset 0 0 0 1px rgba(218, 85, 59, 0.18);
+}
+
+/* 아웃복서 톤: 경쾌한 푸른 이동감. */
+.toneOutboxer .arena {
+  background:
+    radial-gradient(circle at 18% 30%, rgba(86, 204, 242, 0.16), transparent 55%),
+    radial-gradient(circle at 50% 120%, rgba(91, 162, 246, 0.12), transparent 60%),
+    #0c1019;
+  box-shadow: inset 0 0 0 1px rgba(91, 162, 246, 0.16);
+}
+
+/* 복서 avatar: transform 변화를 부드럽게 보여주기 위한 기준점. */
+.avatarBoxer {
+  will-change: transform;
+}
+
+/* --- 공격 모션(잽=짧고 빠른 X, 스트레이트=회전 동반 전진, 훅=좌우 회전, 어퍼=아래→위) --- */
+@keyframes boxerJab {
+  0% { transform: translateX(0); }
+  40% { transform: translateX(10px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes boxerStraight {
+  0% { transform: translateX(0) rotate(0deg); }
+  45% { transform: translateX(16px) rotate(-8deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes boxerHook {
+  0% { transform: rotate(0deg) translateX(0); }
+  30% { transform: rotate(-12deg) translateX(-4px); }
+  60% { transform: rotate(12deg) translateX(8px); }
+  100% { transform: rotate(0deg) translateX(0); }
+}
+
+@keyframes boxerUpper {
+  0% { transform: translateY(0) rotate(0deg); }
+  45% { transform: translateY(-12px) rotate(4deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+.motionJab { animation: boxerJab 220ms ease-out; }
+.motionStraight { animation: boxerStraight 300ms ease-out; }
+.motionHook { animation: boxerHook 320ms ease-in-out; }
+.motionUpper { animation: boxerUpper 320ms ease-out; }
+
+/* --- 회피·피격 모션 --- */
+@keyframes boxerDodge {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(8px) scaleY(0.92); }
+  70% { transform: translateX(-6px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes boxerCounter {
+  0% { transform: translateX(0) rotate(0deg); }
+  30% { transform: translateX(-8px) rotate(6deg); }
+  65% { transform: translateX(12px) rotate(-6deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes boxerGuard {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+@keyframes boxerHurt {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes boxerDown {
+  0% { transform: rotate(0deg) translateY(0); opacity: 1; }
+  100% { transform: rotate(-70deg) translateY(8px); opacity: 0.6; }
+}
+
+.motionDodge { animation: boxerDodge 320ms ease-out; }
+.motionCounter { animation: boxerCounter 340ms ease-out; }
+.motionGuard { animation: boxerGuard 240ms ease-out; }
+.motionHurt { animation: boxerHurt 220ms ease-in-out; }
+.motionDown { animation: boxerDown 500ms ease-in forwards; }
+
+/* 아웃복서 회피는 잔상감을 더한다(빠른 스텝). */
+.toneOutboxer .motionDodge,
+.toneOutboxer .motionCounter {
+  filter: drop-shadow(-8px 0 0 rgba(86, 204, 242, 0.35));
+}
+
+/* --- 스킬 발동·그로기 강타 강조(공격 모션 위에 덧입힘) --- */
+@keyframes boxerSkillGlow {
+  0% { filter: drop-shadow(0 0 0 rgba(155, 208, 255, 0)); }
+  50% { filter: drop-shadow(0 0 10px rgba(155, 208, 255, 0.85)); }
+  100% { filter: drop-shadow(0 0 0 rgba(155, 208, 255, 0)); }
+}
+
+@keyframes boxerGroggyHit {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.motionSkill { animation-name: boxerSkillGlow; animation-duration: 420ms; }
+.motionGroggyHit { animation-name: boxerGroggyHit; animation-duration: 280ms; }
+
+/* --- 인파이터 화면 흔들림(아레나 한정, overflow:hidden으로 가로 스크롤 방지) --- */
+@keyframes arenaShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, 1px); }
+  80% { transform: translate(1px, 0); }
+}
+
+/* 아웃복서는 흔들림 없이 경쾌함을 유지하므로 인파이터에만 적용. */
+.toneInfighter .arenaShake:has(.motionStraight),
+.toneInfighter .arenaShake:has(.motionHook),
+.toneInfighter .arenaShake:has(.motionUpper) {
+  animation: arenaShake 200ms ease-in-out;
+}
+
+/* --- 보스 강공격 WARNING --- */
+@keyframes warningPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.bossWarning {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: #ffe2d6;
+  background: linear-gradient(135deg, rgba(218, 85, 59, 0.35), rgba(159, 46, 46, 0.35));
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+  animation: warningPulse 700ms ease-in-out infinite;
+}
+
+/* --- 전투 텍스트 등장(팝/페이드) --- */
+@keyframes feedPop {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.feedPop { animation: feedPop 200ms ease-out; }
+
+/* 타입별 텍스트 강조: 인파이터=GUARD, 아웃복서=MISS/COUNTER. */
+.toneInfighter .defense_GUARD {
+  color: #fff5f1;
+  background: rgba(218, 85, 59, 0.28);
+}
+
+.toneOutboxer .defense_MISS,
+.toneOutboxer .defense_COUNTER {
+  color: #d6f4ff;
+  background: rgba(86, 204, 242, 0.24);
+}
+
+/* 접근성·성능 안전장치: 모션 감소 선호 시 연출 비활성(핵심 정보는 그대로 유지). */
+@media (prefers-reduced-motion: reduce) {
+  .motionJab,
+  .motionStraight,
+  .motionHook,
+  .motionUpper,
+  .motionDodge,
+  .motionCounter,
+  .motionGuard,
+  .motionHurt,
+  .motionDown,
+  .motionSkill,
+  .motionGroggyHit,
+  .feedPop,
+  .bossWarning,
+  .toneInfighter .arenaShake:has(.motionStraight),
+  .toneInfighter .arenaShake:has(.motionHook),
+  .toneInfighter .arenaShake:has(.motionUpper) {
+    animation: none;
+  }
+
+  /* 넉다운은 표시 상태를 남겨야 하므로 최종 프레임만 정적 적용. */
+  .motionDown {
+    opacity: 0.6;
+  }
+}
+
 @media (max-width: 420px) {
-  .panel {
+  .panel,
+  .topPanel,
+  .combatPanel {
     padding: 18px;
   }
 

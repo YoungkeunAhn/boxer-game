@@ -5,15 +5,32 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 export const CLOCK_TIME_ISO = "2026-01-01T00:00:00.000Z";
 export const CLOCK_TIME_MS = Date.parse(CLOCK_TIME_ISO);
-export const SAVE_KEY = "boxer-game.save.v7";
+export const SAVE_KEY = "boxer-game.save.v8";
 export const LEGACY_SAVE_KEY = "boxer-game.save.v1";
 
-// TASK-021(P3): 퀘스트 시스템 도입 → SCHEMA 6→7, BALANCE 7→8.
-export const SCHEMA_VERSION = 7;
-export const BALANCE_VERSION = 8;
+// 통합(009~013 ↔ 014~021): equippedSkills + questState + 재화/레벨 단일 v8 → SCHEMA 8, BALANCE 11.
+export const SCHEMA_VERSION = 8;
+export const BALANCE_VERSION = 11;
 
 export type BoxerType = "INFIGHTER" | "OUT_BOXER";
 export type Gender = "MALE" | "FEMALE";
+export type SkillId =
+  | "liver_shot"
+  | "iron_guard"
+  | "pressure"
+  | "gazelle_punch"
+  | "dempsey_roll"
+  | "ghost_step"
+  | "navi_step"
+  | "step_back_counter"
+  | "phantom_jab"
+  | "distance_control";
+
+// 타입별 기본 장착 스킬(constants.DEFAULT_EQUIPPED_SKILLS와 동기화).
+const DEFAULT_EQUIPPED_SKILLS: Record<BoxerType, { active: SkillId[]; passive: SkillId | null }> = {
+  INFIGHTER: { active: ["liver_shot", "pressure", "dempsey_roll"], passive: "iron_guard" },
+  OUT_BOXER: { active: ["phantom_jab", "ghost_step", "navi_step"], passive: "step_back_counter" },
+};
 
 export type UpgradeKey =
   | "attackPower"
@@ -44,6 +61,8 @@ export type SeedOptions = {
   playerExp?: number;
   // TASK-021(P3): 퀘스트 상태 시드(기본: 빈 진행, 리셋 시각은 CLOCK_TIME_MS 이후 먼 미래로 둬 로드 시 리셋이 일어나지 않게 한다).
   questState?: QuestStateSeed;
+  // v1.3d: 장착 스킬 시드(기본: 타입별 DEFAULT_EQUIPPED_SKILLS).
+  equippedSkills?: { active: SkillId[]; passive: SkillId | null };
 };
 
 // 저장 v7의 questState 형태(save.ts isQuestState를 통과해야 한다).
@@ -100,6 +119,7 @@ export function buildSaveJson(options: SeedOptions = {}): string {
     playerLevel = 1,
     playerExp = 0,
     questState = {},
+    equippedSkills = DEFAULT_EQUIPPED_SKILLS[boxerType],
   } = options;
 
   return JSON.stringify({
@@ -118,6 +138,8 @@ export function buildSaveJson(options: SeedOptions = {}): string {
       diamond,
       playerLevel,
       playerExp,
+      // v1.3d: 장착 스킬(없으면 isBoxer 실패 → 로드 시 invalid).
+      equippedSkills,
     },
     position: { chapter, stage },
     isFarming,
@@ -129,6 +151,15 @@ export function buildSaveJson(options: SeedOptions = {}): string {
 // 가짜 클럭 설치. install만으로는 실시간으로 흐르므로, goto 이후 freezeClock으로 동결한다.
 export async function installClock(page: Page, timeMs = CLOCK_TIME_MS): Promise<void> {
   await page.clock.install({ time: new Date(timeMs) });
+}
+
+// Math.random을 고정값으로 동결한다(goto 전에 호출). 기본 0.999는 회피(0.05)·치명타(0.05)
+// 롤을 모두 실패시키므로, 카운터·치명타 같은 RNG 변수를 제거해 공격 데미지를 결정적으로 만든다.
+// 타이머 중복 검사처럼 "공격 한 번의 데미지"만 보고 싶을 때 쓴다.
+export async function freezeRandom(page: Page, value = 0.999): Promise<void> {
+  await page.addInitScript((v) => {
+    Math.random = () => v;
+  }, value);
 }
 
 // install 직후의 클럭은 실시간으로 흐른다. 현재 fake now를 읽어 그 약간 뒤에서 동결한다.
@@ -209,7 +240,7 @@ export async function enterBoss(page: Page, options: SeedOptions = {}): Promise<
   await expect(page.getByTestId("combat-badge")).toHaveText("BOSS");
 }
 
-// TASK-015: 전투 컨트롤 testid 헬퍼. SAVE_KEY/SCHEMA_VERSION/BALANCE_VERSION은 불변(컨트롤은 휘발 UI 상태).
+// TASK-015: 전투 컨트롤 testid 헬퍼.
 export function autoToggle(page: Page) {
   return page.getByTestId("auto-toggle");
 }
@@ -226,9 +257,19 @@ export function skillButton(page: Page) {
   return page.getByTestId("skill-button");
 }
 
+// 통합 UI: 복서/몬스터 HP·그로기·기본 스킬 쿨타임 바가 모두 role="progressbar"이고 상단 바 경험치 바도
+//   progressbar이므로, 헬퍼는 data-testid로 스코프해 strict-mode 다중 매칭을 피한다.
+//   기존 hpBar()는 몬스터 HP 바를 가리킨다(기존 스펙 호환).
 export function hpBar(page: Page) {
-  // TASK-020(P3): 상단 바 경험치 바도 progressbar라 이름(…체력)으로 몬스터 HP 바를 한정한다.
-  return page.getByRole("progressbar", { name: /체력$/ });
+  return page.getByTestId("monster-hp");
+}
+
+export function boxerHpBar(page: Page) {
+  return page.getByTestId("boxer-hp");
+}
+
+export function groggyBar(page: Page) {
+  return page.getByTestId("groggy-bar");
 }
 
 export async function hpNow(page: Page): Promise<number> {
@@ -247,7 +288,7 @@ export function upgradeButton(page: Page, key: UpgradeKey) {
   return page.getByTestId(`upgrade-button-${key}`);
 }
 
-// TASK-020(P3): 상단 바·하단 5탭 testid 헬퍼. 탭은 휘발 UI 상태라 SAVE_KEY/SCHEMA/BALANCE 불변(v6/6/7).
+// TASK-020(P3): 상단 바·하단 5탭 testid 헬퍼. 탭은 휘발 UI 상태(저장 안 함).
 export type TabId = "shop" | "bag" | "fighter" | "quest" | "arena";
 
 export function topBar(page: Page) {

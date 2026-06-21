@@ -7,9 +7,9 @@
 
 ## 참고 문서
 
-- `docs/기획/boxer/types.md`, `docs/기획/boxer/infighter.md`, `docs/기획/boxer/out-boxer.md`, `docs/기획/boxer/gender.md`
-- `docs/기획/systems/data-model.md`, `docs/기획/systems/save-model.md`
-- `docs/기획/presentation/ui.md`
+- `docs/boxer/types.md`, `docs/boxer/infighter.md`, `docs/boxer/out-boxer.md`, `docs/boxer/gender.md`
+- `docs/systems/data-model.md`, `docs/systems/save-model.md`
+- `docs/presentation/ui.md`
 
 ## 작업 범위
 

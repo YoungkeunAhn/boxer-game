@@ -10,26 +10,28 @@ import {
   switchFighterType,
 } from "../game/combat";
 import {
-  COMBO_GAUGE_MAX,
+  ACTIVE_SKILL_SLOT_MAX,
   DEFAULT_AUTO_MODE,
   DEFAULT_BOXER_TYPE,
+  DEFAULT_EQUIPPED_SKILLS,
   DEFAULT_GENDER,
   DEFAULT_SPEED_MULTIPLIER,
   EXP_PER_BOSS_CLEAR,
   EXP_PER_KILL,
-  FINISHER_DAMAGE_MULT,
+  GROGGY_DURATION_MS,
   INITIAL_DIAMOND,
   INITIAL_PLAYER_EXP,
   INITIAL_PLAYER_LEVEL,
   INITIAL_UPGRADE_LEVELS,
   MAX_SAFE_GAME_INTEGER,
+  QUEST_AUTO_BATTLE_MS_PER_MINUTE,
   TYPE_SWITCH_COOLDOWN_MS,
 } from "../game/constants";
 import {
+  addDiamondToBoxer,
   addExpToBoxer,
   addProgressToBoxer,
   calculateCombatStats,
-  calculateComboAdjustedDamage,
   calculateGoldReward,
   expToNext,
   purchaseUpgrade,
@@ -45,8 +47,12 @@ import {
   hasClaimableQuest,
   type QuestCumulativeSource,
 } from "../game/quests";
-import { addDiamondToBoxer } from "../game/formulas";
-import { QUEST_AUTO_BATTLE_MS_PER_MINUTE } from "../game/constants";
+import { isPassiveSkill, isSkillEquippableFor } from "../data/skills";
+import {
+  applyActiveSkill,
+  mergeSkillCooldowns,
+  selectReadySkill,
+} from "../game/skills";
 import { clearGame, loadGame, saveGame, type LoadGameResult, type SaveSnapshot } from "../game/save";
 import type {
   AutoMode,
@@ -59,6 +65,7 @@ import type {
   MonsterAttackResult,
   QuestReward,
   QuestState,
+  SkillId,
   SpeedMultiplier,
   UpgradeKey,
 } from "../game/types";
@@ -70,10 +77,11 @@ type GameActions = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
-  // TASK-015: 전투 컨트롤. AUTO 토글·배속·수동 탭·수동 스킬(피니시).
+  // TASK-015: 전투 컨트롤. AUTO 토글·배속·수동 탭·수동 스킬.
   toggleAuto: () => void;
   setSpeedMultiplier: (multiplier: SpeedMultiplier) => void;
   manualAttack: () => void;
+  // 수동 스킬: MANUAL 모드에서 준비된 장착 액티브 스킬 1개를 슬롯 우선순위로 발동한다(v1.3d 슬롯 기반).
   triggerSkill: () => void;
   // TASK-017: 단일 캐릭터 타입/성별 런타임 전환(강화·골드 유지, typeMultiplier 재적용).
   switchType: (boxerType: BoxerType, gender: Gender) => void;
@@ -84,6 +92,10 @@ type GameActions = {
   claimQuest: (questId: string) => void;
   claimMilestone: (threshold: number) => void;
   claimFreeChest: () => void;
+  // v1.3d: 전용 스킬 장착. 타입 제약·중복 방지·슬롯 수 검증 후 boxer.equippedSkills를 갱신한다.
+  equipSkill: (slot: number, skillId: SkillId) => void;
+  unequipSkill: (slot: number) => void;
+  equipPassive: (skillId: SkillId | null) => void;
 };
 
 export type GameStore = GameState & GameActions;
@@ -132,6 +144,11 @@ const EMPTY_STATE: GameState = {
   speedMultiplier: DEFAULT_SPEED_MULTIPLIER,
   // TASK-021(P3): 퀘스트 초기 상태(placeholder). 실제 리셋 시각은 init/createBoxer에서 now로 갱신.
   questState: EMPTY_QUEST_STATE,
+  // v1.3c/v1.3d: 보스 그로기·스킬 UI 파생값(비저장).
+  groggyGauge: 0,
+  groggyMax: 0,
+  isGroggy: false,
+  lastSkill: null,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -154,6 +171,19 @@ function getBossRemainingMs(combat: CombatRuntime | null, now: number): number {
   return combat?.bossDeadlineAt === null || !combat
     ? 0
     : Math.max(0, combat.bossDeadlineAt - now);
+}
+
+// v1.3c: 보스 그로기 UI 상태를 combat 런타임 필드에서 파생한다(주입된 now 기준). 로직은 combat.ts에만 둔다.
+function getGroggyView(
+  combat: CombatRuntime | null,
+  now: number,
+): { groggyGauge: number; groggyMax: number; isGroggy: boolean } {
+  if (!combat) return { groggyGauge: 0, groggyMax: 0, isGroggy: false };
+  return {
+    groggyGauge: combat.groggyGauge,
+    groggyMax: combat.groggyMax,
+    isGroggy: combat.groggyUntil !== null && now < combat.groggyUntil,
+  };
 }
 
 function getInitialState(result: LoadGameResult, now: number): InitialStoreState {
@@ -183,6 +213,7 @@ function getInitialState(result: LoadGameResult, now: number): InitialStoreState
         offlineSummary: elapsedMs > 0 ? offline : null,
         message: "저장된 복서를 불러왔습니다.",
         bossRemainingMs: getBossRemainingMs(combat, now),
+        ...getGroggyView(combat, now),
       },
     };
   }
@@ -215,6 +246,11 @@ function createDefaultBoxer(
     diamond: INITIAL_DIAMOND,
     playerLevel: INITIAL_PLAYER_LEVEL,
     playerExp: INITIAL_PLAYER_EXP,
+    // v1.3d: 타입별 기본 장착 스킬(액티브 3 + 패시브 1)로 초기화한다.
+    equippedSkills: {
+      active: [...DEFAULT_EQUIPPED_SKILLS[boxerType].active],
+      passive: DEFAULT_EQUIPPED_SKILLS[boxerType].passive,
+    },
   };
 }
 
@@ -288,6 +324,7 @@ export function createGameStore(
       let lastAttack = get().lastAttack;
       let recentDefense: MonsterAttackResult | null = get().recentDefense;
       let lastCombo: ComboId | null = get().lastCombo;
+      let lastSkill: SkillId | null = get().lastSkill;
       let killed = false;
       let bossTimedOut = false;
       let bossDefeated = false;
@@ -341,6 +378,8 @@ export function createGameStore(
           }
           // v1.3b: 발동한 콤비네이션이 있으면 직전 발동 콤보로 갱신(연출용). null이면 직전 값 유지.
           if (step.attack.combo) lastCombo = step.attack.combo;
+          // v1.3d: 발동한 액티브 스킬이 있으면 직전 발동 스킬로 갱신(연출용). null이면 직전 값 유지.
+          if (step.attack.skillTriggered) lastSkill = step.attack.skillTriggered;
         }
         if (step.monsterAttack) recentDefense = step.monsterAttack;
         bossTimedOut ||= step.bossTimedOut;
@@ -385,7 +424,10 @@ export function createGameStore(
         comboGauge: combat.comboGauge,
         comboStep: combat.comboStep,
         lastCombo,
+        lastSkill,
         bossRemainingMs: getBossRemainingMs(combat, now),
+        // v1.3c: 보스 그로기 게이지·상태를 노출(combat 런타임에서 파생). 로직 추가 없이 표시용.
+        ...getGroggyView(combat, now),
         message: knockedDown
           ? "KNOCK DOWN"
           : bossTimedOut
@@ -446,6 +488,7 @@ export function createGameStore(
           message: "첫 몬스터를 향한 자동 공격을 시작합니다.",
           isRunning: true,
           bossRemainingMs: getBossRemainingMs(combat, now),
+          ...getGroggyView(combat, now),
         });
         persist(true);
         scheduleNext();
@@ -457,24 +500,28 @@ export function createGameStore(
         const result = purchaseUpgrade(state.boxer, key);
         if (!result.purchased) return;
         const now = syncGameNow();
+        // 강화 전/후 공격 속도를 둘 다 구한다(진척 보존 재스케줄에 필요).
+        const prevStats = calculateCombatStats(state.boxer.upgradeLevels, state.boxer.boxerType);
         const stats = calculateCombatStats(result.boxer.upgradeLevels, result.boxer.boxerType);
         // 가정: 체력 강화 시 최대 HP가 늘어난 만큼 현재 HP도 가산(풀충전 아님). 현재 HP는 새 최대치 클램프.
         const hpDelta = Math.max(0, stats.maxHp - state.combat.boxerMaxHp);
         const boxerHp = Math.min(stats.maxHp, state.combat.boxerHp + hpDelta);
-        // 변경된 공격 속도를 반영해 4종 공격 쿨타임을 now 기준으로 재설정한다(가정: 콤보 진행 초기화).
-        const rescheduled = rescheduleAttacks(state.combat, stats.attackSpeed, now);
+        // 변경된 공격 속도를 반영하되 진행 중인 공격 쿨타임 진척을 보존해 재스케줄한다(연타 강화로도 공격이 끊기지 않음).
+        const rescheduled = rescheduleAttacks(state.combat, prevStats.attackSpeed, stats.attackSpeed, now);
+        const upgradedCombat = {
+          ...rescheduled,
+          boxerHp,
+          boxerMaxHp: stats.maxHp,
+        };
         // TASK-021(P3): 강화 성공 1회 = upgradeStat 퀘스트 +1(리셋 정산 후 진행).
         let questState = applyQuestResets(state.questState, now, questSourceFromBoxer(result.boxer));
         questState = addQuestProgress(questState, "upgradeStat", 1);
         set({
           boxer: result.boxer,
-          combat: {
-            ...rescheduled,
-            boxerHp,
-            boxerMaxHp: stats.maxHp,
-          },
+          combat: upgradedCombat,
           questState,
           message: `강화 완료! ${result.cost.toLocaleString()} 골드를 사용했습니다.`,
+          ...getGroggyView(upgradedCombat, now),
         });
         persist(true);
         scheduleNext();
@@ -490,6 +537,7 @@ export function createGameStore(
           lastAttack: null,
           message: "보스에게 다시 도전합니다.",
           bossRemainingMs: getBossRemainingMs(combat, now),
+          ...getGroggyView(combat, now),
         });
         persist(true);
         scheduleNext();
@@ -503,7 +551,11 @@ export function createGameStore(
         advanceCombat(gameTime);
         clearTimer();
         pausedAt = dependencies.now();
-        set({ isRunning: false, bossRemainingMs: getBossRemainingMs(get().combat, gameTime) });
+        set({
+          isRunning: false,
+          bossRemainingMs: getBossRemainingMs(get().combat, gameTime),
+          ...getGroggyView(get().combat, gameTime),
+        });
         persist(true);
       },
 
@@ -545,11 +597,70 @@ export function createGameStore(
           offlineSummary,
           isRunning: true,
           bossRemainingMs: getBossRemainingMs(combat, gameTime),
+          ...getGroggyView(combat, gameTime),
         });
         if (shouldPersistOffline) {
           persist(true);
           shouldPersistOffline = false;
         }
+        scheduleNext();
+      },
+
+      equipSkill: (slot, skillId) => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        if (slot < 0 || slot >= ACTIVE_SKILL_SLOT_MAX) return;
+        // 액티브 슬롯에는 이 타입의 액티브 스킬만(패시브·교차 타입 거부).
+        if (isPassiveSkill(skillId)) return;
+        if (!isSkillEquippableFor(skillId, state.boxer.boxerType)) return;
+        const active = [...state.boxer.equippedSkills.active];
+        // 중복 방지: 같은 스킬이 다른 슬롯에 있으면 그 슬롯을 비운다.
+        const existing = active.indexOf(skillId);
+        if (existing !== -1 && existing !== slot) active.splice(existing, 1);
+        // 슬롯에 배치(빈 슬롯을 채우기 위해 길이를 맞춘다).
+        const next = [...active];
+        next[slot] = skillId;
+        const trimmed = next.filter((id): id is SkillId => Boolean(id)).slice(0, ACTIVE_SKILL_SLOT_MAX);
+        // 쿨타임은 게임 시간 기준(combat 클럭)으로 재정합한다.
+        const now = syncGameNow();
+        const boxer = { ...state.boxer, equippedSkills: { ...state.boxer.equippedSkills, active: trimmed } };
+        // v1.3d: 새 액티브 슬롯에 맞춰 진행 중 전투의 쿨타임 키를 재정합한다(없으면 새 스킬이 영영 미발동).
+        const combat = { ...state.combat, skillCooldowns: mergeSkillCooldowns(trimmed, state.combat.skillCooldowns, now) };
+        set({ boxer, combat, message: "스킬을 장착했습니다." });
+        persist(true);
+        scheduleNext();
+      },
+
+      unequipSkill: (slot) => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        if (slot < 0 || slot >= ACTIVE_SKILL_SLOT_MAX) return;
+        const active = [...state.boxer.equippedSkills.active];
+        if (slot >= active.length) return;
+        active.splice(slot, 1);
+        const now = syncGameNow();
+        const boxer = { ...state.boxer, equippedSkills: { ...state.boxer.equippedSkills, active } };
+        // v1.3d: 해제된 스킬의 쿨타임 키를 버리고 남은 슬롯의 진행 중 쿨타임은 보존한다.
+        const combat = { ...state.combat, skillCooldowns: mergeSkillCooldowns(active, state.combat.skillCooldowns, now) };
+        set({ boxer, combat, message: "스킬을 해제했습니다." });
+        persist(true);
+        scheduleNext();
+      },
+
+      equipPassive: (skillId) => {
+        const state = get();
+        if (!state.boxer || !state.combat) return;
+        if (skillId !== null) {
+          // 패시브 슬롯에는 이 타입의 패시브 스킬만.
+          if (!isPassiveSkill(skillId)) return;
+          if (!isSkillEquippableFor(skillId, state.boxer.boxerType)) return;
+        }
+        const boxer = {
+          ...state.boxer,
+          equippedSkills: { ...state.boxer.equippedSkills, passive: skillId },
+        };
+        set({ boxer, message: skillId ? "패시브를 장착했습니다." : "패시브를 해제했습니다." });
+        persist(true);
         scheduleNext();
       },
 
@@ -613,15 +724,14 @@ export function createGameStore(
         else if (result.killed) persist(false);
       },
 
-      // TASK-015: 수동 스킬(피니시) — AUTO OFF 전용·콤보 게이지 가득일 때만.
-      //   가정/TODO: 스킬 슬롯 시스템(TASK-010)이 아직 없어, equip.md의 Slot1>2>3 우선순위를 구현할 대상이 없다.
-      //   임시로 '콤보 게이지를 소비하는 강타(어퍼 ×FINISHER_DAMAGE_MULT) 1종'으로 한정한다.
-      //   TASK-010 도입 시 슬롯 기반 스킬로 교체한다.
+      // 수동 스킬(MANUAL 전용) — v1.3d 슬롯 기반.
+      //   장착 액티브 슬롯에서 쿨타임이 끝난 스킬 1개를 슬롯 우선순위(Slot1>2>3)로 골라 즉시 발동한다.
+      //   준비된 스킬이 없으면 무동작(no-op). AUTO 모드에서는 resolveAttack 내부에서 자동 발동되므로 이 버튼은 MANUAL 전용.
+      //   발동 효과(monsterDamage/groggyGain/buff/internalDoT)와 쿨타임 소비는 applyActiveSkill 결과를 그대로 반영한다.
       triggerSkill: () => {
         const state = get();
         const { boxer, combat } = state;
         if (state.autoMode !== "MANUAL" || !boxer || !combat) return;
-        if (combat.comboGauge < COMBO_GAUGE_MAX) return; // 게이지 부족 시 무동작.
         const now = syncGameNow();
         // 보스 타임아웃이 먼저면 스킬 대신 타임아웃을 정산한다(밸런스 게임 시간 기준 유지).
         if (combat.bossDeadlineAt !== null && now > combat.bossDeadlineAt) {
@@ -629,16 +739,20 @@ export function createGameStore(
           persist(true);
           return;
         }
+        // 슬롯 우선순위로 준비된 액티브 스킬을 고른다. 없으면 무동작.
+        const readySkill = selectReadySkill(boxer.equippedSkills.active, combat.skillCooldowns, now);
+        if (!readySkill) {
+          set({ message: "사용할 수 있는 스킬이 없습니다." });
+          return;
+        }
         const stage = getStageDefinition(combat.position);
         const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
-        const base = calculateComboAdjustedDamage(stats, "UPPER", null, dependencies.random());
-        // 피니시 배수는 클램프 밖에서 곱하므로 안전 정수 상한으로 다시 클램프한다
-        // (attackPower 상한이 무제한이라 base.damage가 상한 근처면 ×3이 넘칠 수 있음).
-        const damage = Math.min(MAX_SAFE_GAME_INTEGER, Math.floor(base.damage * FINISHER_DAMAGE_MULT));
+        const effect = applyActiveSkill(readySkill, stats, now);
+        const damage = effect.monsterDamage;
         const killed = damage >= combat.monsterHp;
         const goldReward = killed ? calculateGoldReward(stage.goldReward, stats.goldBonus) : 0;
         const bossDefeated = killed && stage.isBoss;
-        // TASK-019(P3): 수동 피니시 처치도 경험치 가산(보스 클리어는 보스 보상, 일반은 킬 보상).
+        // 처치 시 경험치 가산(보스 클리어는 보스 보상, 일반은 킬 보상).
         const nextBoxer = killed
           ? addExpToBoxer(
               addProgressToBoxer(boxer, 1, goldReward),
@@ -646,10 +760,41 @@ export function createGameStore(
             )
           : boxer;
 
+        // 발동 스킬에 따른 런타임 갱신값(쿨타임·버프·내상·그로기). createCombatRuntime로 전이되는 경우엔 초기화되므로 미적용.
+        const nextSkillCooldowns =
+          effect.cooldownMs !== null
+            ? { ...combat.skillCooldowns, [readySkill]: now + effect.cooldownMs }
+            : combat.skillCooldowns;
+        const nextBuffs = effect.buff ? [...combat.activeBuffs, effect.buff] : combat.activeBuffs;
+        const nextInternalDoT = effect.internalDoT ?? combat.internalDoT;
+        // 그로기 누적(보스·비그로기 상태에서만). 상한 도달 시 그로기 진입.
+        const isGroggyNow = combat.groggyUntil !== null && now < combat.groggyUntil;
+        let groggyGauge = combat.groggyGauge;
+        let groggyUntil = combat.groggyUntil;
+        let groggyTriggered = false;
+        if (combat.groggyMax > 0 && effect.groggyGain > 0 && !isGroggyNow) {
+          const withSkill = groggyGauge + effect.groggyGain;
+          if (withSkill >= combat.groggyMax) {
+            groggyGauge = 0;
+            groggyUntil = now + GROGGY_DURATION_MS;
+            groggyTriggered = true;
+          } else {
+            groggyGauge = Math.min(combat.groggyMax, withSkill);
+          }
+        }
+
         let nextCombat: CombatRuntime;
         if (!killed) {
-          // 피니시 발동만으로 게이지를 소비한다(처치 못 해도 소비). 진행은 동일 스테이지 유지.
-          nextCombat = { ...combat, monsterHp: Math.max(0, combat.monsterHp - damage), comboGauge: 0 };
+          // 스킬 발동만으로 쿨타임·버프·내상·그로기를 갱신한다(처치 못 해도 소비). 진행은 동일 스테이지 유지.
+          nextCombat = {
+            ...combat,
+            monsterHp: Math.max(0, combat.monsterHp - damage),
+            skillCooldowns: nextSkillCooldowns,
+            activeBuffs: nextBuffs,
+            internalDoT: nextInternalDoT,
+            groggyGauge,
+            groggyUntil,
+          };
         } else if (combat.isFarming) {
           nextCombat = createCombatRuntime(nextBoxer, combat.position, now, true);
         } else {
@@ -657,7 +802,7 @@ export function createGameStore(
           nextCombat = createCombatRuntime(nextBoxer, getNextStagePosition(combat.position), now);
         }
 
-        // TASK-021(P3): 수동 피니시도 퀘스트 진행에 반영(advanceCombat을 거치지 않는 경로).
+        // TASK-021(P3): 수동 스킬 처치도 퀘스트 진행에 반영(advanceCombat을 거치지 않는 경로).
         let questState = applyQuestResets(state.questState, now, questSourceFromBoxer(nextBoxer));
         if (killed) {
           if (bossDefeated) questState = addQuestProgress(questState, "bossClear", 1);
@@ -675,19 +820,29 @@ export function createGameStore(
           lastAttack: {
             stageId: stage.id,
             damage,
-            isCritical: base.isCritical,
+            isCritical: false,
             killed,
             goldReward,
+            // 스킬 연출은 attackType/hand를 어퍼/오른손 기본값으로 표기(연출 톤 유지). 콤보는 없음.
             attackType: "UPPER",
             hand: "RIGHT",
             combo: null,
+            groggyGain: effect.groggyGain,
+            groggyTriggered,
+            groggyBonusApplied: false,
+            skillTriggered: readySkill,
+            hits: effect.hits,
+            skillDamage: damage,
+            internalDamage: 0,
           },
+          lastSkill: readySkill,
           comboGauge: nextCombat.comboGauge,
           comboStep: nextCombat.comboStep,
           message: bossDefeated
             ? "보스를 쓰러뜨렸습니다! 다음 챕터로 이동합니다."
-            : "피니시!",
+            : "스킬 발동!",
           bossRemainingMs: getBossRemainingMs(nextCombat, now),
+          ...getGroggyView(nextCombat, now),
         });
         persist(killed);
       },

@@ -57,6 +57,7 @@ const UPGRADE_LABELS: Record<UpgradeKey, { name: string; value: (boxer: Boxer) =
 
 // TASK-016: 9종 그대로 유지하고 표현만 공격/방어 두 그룹으로 정돈한다.
 // 키·순서는 기존 UPGRADE_LABELS 정의 순서와 동일(수식·저장 불변, BALANCE/SCHEMA 범프 없음).
+// (브랜치 009~013의 OFFENSE_KEYS/DEFENSE_KEYS 분류와 동일한 9종 그룹핑을 main의 탭 구조로 흡수한다.)
 const UPGRADE_GROUPS = {
   attack: ["attackPower", "attackSpeed", "critRate", "critDamage", "goldBonus"],
   defense: ["maxHp", "defense", "dodge", "counter"],

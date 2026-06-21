@@ -7,8 +7,8 @@
 
 ## 참고 문서
 
-- `docs/기획/combat/monster-attacks.md`, `docs/기획/combat/hp-and-defeat.md`
-- `docs/기획/systems/stats-and-formulas.md`, `docs/기획/systems/game-systems.md`
+- `docs/combat/monster-attacks.md`, `docs/combat/hp-and-defeat.md`
+- `docs/systems/stats-and-formulas.md`, `docs/systems/game-systems.md`
 
 ## 작업 범위
 
