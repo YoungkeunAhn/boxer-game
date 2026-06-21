@@ -110,6 +110,15 @@ export async function installClock(page: Page, timeMs = CLOCK_TIME_MS): Promise<
   await page.clock.install({ time: new Date(timeMs) });
 }
 
+// Math.random을 고정값으로 동결한다(goto 전에 호출). 기본 0.999는 회피(0.05)·치명타(0.05)
+// 롤을 모두 실패시키므로, 카운터·치명타 같은 RNG 변수를 제거해 공격 데미지를 결정적으로 만든다.
+// 타이머 중복 검사처럼 "공격 한 번의 데미지"만 보고 싶을 때 쓴다.
+export async function freezeRandom(page: Page, value = 0.999): Promise<void> {
+  await page.addInitScript((v) => {
+    Math.random = () => v;
+  }, value);
+}
+
 // install 직후의 클럭은 실시간으로 흐른다. 현재 fake now를 읽어 그 약간 뒤에서 동결한다.
 // 버퍼(300ms)는 (a) evaluate→pauseAt 왕복 드리프트보다 크고 (b) 기본 공격 간격 1000ms보다
 // 작아, 동결용 점프가 예약된 공격 타이머를 미리 발사하지 않도록 한다.

@@ -7,6 +7,7 @@ import {
   enterBoss,
   hpNow,
   hpMax,
+  freezeRandom,
 } from "./fixtures";
 
 // docs/browser-smoke-checklist.md - 데스크톱과 장시간 실행 (chromium-desktop 프로젝트)
@@ -27,9 +28,18 @@ test.describe("데스크톱·장시간 실행", () => {
 
   test("공격 한 번당 HP가 한 번만 감소한다(타이머 중복 없음)", async ({ page }) => {
     // 105HP(1-4) 몬스터에 기본 공격력(10)으로 공격한다. 첫 4초는 잽(1초 쿨타임)만 ready이므로
-    // 매 초 잽 한 번씩만 닿아야 한다(스트레이트는 5초). 잽 데미지는 3(일반)/6(치명타),
-    // 중복 타이머라면 한 주기에 2번 이상 닿아 6을 넘는다.
-    await seedSave(page, { chapter: 1, stage: 4 });
+    // 매 초 잽 한 번씩만 닿아야 한다(스트레이트는 5초). 몬스터 HP에 닿는 변수를 모두 제거한다:
+    //   - RNG 동결(회피·치명타 실패) → 아웃복서 카운터(회피 성공 시 발동)·치명타 없음
+    //   - 스킬 비움 → 액티브 스킬 피해 없음
+    //   - 아웃복서 선택 → 인파이터 가드 카운터(몬스터 반격)가 끼지 않음
+    // 그러면 잽 데미지는 정확히 3으로 결정적이다. 중복 타이머라면 한 주기에 2번 닿아 6이 된다.
+    await freezeRandom(page);
+    await seedSave(page, {
+      chapter: 1,
+      stage: 4,
+      boxerType: "OUT_BOXER",
+      equippedSkills: { active: [], passive: null },
+    });
     await gotoFrozen(page);
 
     const max = await hpMax(page);
@@ -40,8 +50,7 @@ test.describe("데스크톱·장시간 실행", () => {
       await page.clock.runFor(1_000);
       const current = await hpNow(page);
       const delta = prev - current;
-      expect(delta).toBeGreaterThan(0);
-      expect(delta).toBeLessThanOrEqual(6);
+      expect(delta).toBe(3);
       prev = current;
     }
   });
