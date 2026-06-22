@@ -105,21 +105,6 @@
   overflow-wrap: anywhere;
 }
 
-/* 파이터 탭 그리드(2열). 좁은 화면에서는 1열로 떨어진다. */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.grid > * {
-  min-width: 0;
-}
-
-.status {
-  grid-row: span 2;
-}
-
 @media (max-width: 720px) {
   .page {
     width: min(100% - 24px, 960px);
@@ -128,10 +113,6 @@
 
   .hero {
     align-items: flex-start;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
   }
 }
 

@@ -8,6 +8,8 @@ type SkillCooldownBarProps = {
   combat: CombatRuntime;
   // 표시 전용 기준 시각(스토어 틱마다 갱신되는 상태에서 파생). 로직/타이머를 새로 만들지 않는다.
   now: number;
+  // CombatStage 무대 우하단 오버레이로 배치할 때 자체 박스 크롬·제목을 벗긴다(표시 로직·testid 불변).
+  bare?: boolean;
 };
 
 const ATTACK_LABELS: Record<AttackType, string> = {
@@ -21,18 +23,26 @@ const ATTACK_LABELS: Record<AttackType, string> = {
 //   실효 쿨타임 = ATTACK_COOLDOWN_MS / attackSpeed(constants·formulas와 동일 규칙).
 //   진행도 = clamp((실효쿨 - 남은시간) / 실효쿨, 0~1). 남은시간 = nextReadyAt - now.
 //   프레젠테이셔널: now는 인자로 받고 여기서 시간을 흐르게 하지 않는다.
-export function SkillCooldownBar({ boxer, combat, now }: SkillCooldownBarProps) {
+export function SkillCooldownBar({ boxer, combat, now, bare = false }: SkillCooldownBarProps) {
   const attackSpeed = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).attackSpeed;
 
   return (
-    <section className={styles.panel} aria-labelledby="skill-cooldown-title" data-testid="skill-cooldown-panel">
-      <div className={styles.headingRow}>
-        <div>
-          <p className={styles.eyebrow}>BASIC</p>
-          <h2 className={styles.title} id="skill-cooldown-title">기본 공격</h2>
-          <p className={styles.description}>잽·스트레이트·훅·어퍼가 각자 쿨타임으로 자동 발동합니다.</p>
+    <section
+      className={`${styles.panel} ${bare ? styles.bare : ""}`}
+      aria-labelledby="skill-cooldown-title"
+      data-testid="skill-cooldown-panel"
+    >
+      {bare ? (
+        <h2 className={styles.srOnly} id="skill-cooldown-title">기본 공격 쿨타임</h2>
+      ) : (
+        <div className={styles.headingRow}>
+          <div>
+            <p className={styles.eyebrow}>BASIC</p>
+            <h2 className={styles.title} id="skill-cooldown-title">기본 공격</h2>
+            <p className={styles.description}>잽·스트레이트·훅·어퍼가 각자 쿨타임으로 자동 발동합니다.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={styles.cooldownList}>
         {ATTACK_TYPES.map((type) => {

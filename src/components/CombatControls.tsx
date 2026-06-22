@@ -8,7 +8,12 @@ import styles from "./CombatControls.module.css";
 //  - 배속 토글: x1 ↔ x2(게임 시간 가속, 보스 타임아웃은 게임 시간 기준 → 밸런스 불변).
 //  - 수동 공격 버튼: AUTO OFF에서만 활성.
 //  - 수동 스킬(피니시) 버튼: AUTO OFF + 콤보 게이지 가득일 때만 활성(가정/TODO: 임시 스킬 1종).
-export function CombatControls() {
+type CombatControlsProps = {
+  // CombatStage 무대 위 오버레이로 배치할 때 자체 테두리/배경/그림자를 벗긴다(액션·상태·testid 불변).
+  bare?: boolean;
+};
+
+export function CombatControls({ bare = false }: CombatControlsProps = {}) {
   const combat = useGameStore((state) => state.combat);
   const autoMode = useGameStore((state) => state.autoMode);
   const speedMultiplier = useGameStore((state) => state.speedMultiplier);
@@ -28,7 +33,7 @@ export function CombatControls() {
   const skillReady = comboGauge >= COMBO_GAUGE_MAX;
 
   return (
-    <section className={styles.controls} aria-label="전투 컨트롤">
+    <section className={`${styles.controls} ${bare ? styles.bare : ""}`} aria-label="전투 컨트롤">
       <div className={styles.row}>
         <button
           type="button"

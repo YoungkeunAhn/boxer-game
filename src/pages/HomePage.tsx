@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
-import { BoxerFigure } from "../components/BoxerFigure";
-import { CombatControls } from "../components/CombatControls";
-import { CombatHeader } from "../components/CombatHeader";
-import { CombatPanel } from "../components/CombatPanel";
+import { CombatStage } from "../components/CombatStage";
 import { BoxerCreation } from "../components/BoxerCreation";
-import { BoxerStatus } from "../components/BoxerStatus";
 import { QuestPanel } from "../components/QuestPanel";
-import { SkillCooldownBar } from "../components/SkillCooldownBar";
 import { SkillPanel } from "../components/SkillPanel";
 import { TabBar, type TabId } from "../components/TabBar";
 import { TopBar } from "../components/TopBar";
@@ -21,17 +16,12 @@ import styles from "./HomePage.module.css";
 
 export function HomePage() {
   const boxer = useGameStore((state) => state.boxer);
-  const combat = useGameStore((state) => state.combat);
-  // 기본 공격 쿨타임 진행도 표시용 기준 시각. 스토어가 틱마다 set하여 리렌더되면 함께 갱신된다.
-  //   표시 전용이며 UI에 별도 타이머/로직을 추가하지 않는다(프레젠테이셔널 원칙).
   const offlineSummary = useGameStore((state) => state.offlineSummary);
   const message = useGameStore((state) => state.message);
   const storageWarning = useGameStore((state) => state.storageWarning);
   const pause = useGameStore((state) => state.pause);
   const resume = useGameStore((state) => state.resume);
   const reset = useGameStore((state) => state.reset);
-  // 표시 전용 기준 시각(주입 시계). 스토어 틱마다 리렌더되면 함께 갱신된다(Date.now 직접 호출 회피).
-  const getNow = useGameStore((state) => state.getNow);
 
   // TASK-020(P3): 휘발 탭 상태(라우터 미도입 — 가정). 기본=파이터(중앙 홈). 새로고침 시 파이터로 리셋(저장 안 함).
   const [activeTab, setActiveTab] = useState<TabId>("fighter");
@@ -113,27 +103,14 @@ export function HomePage() {
             </button>
           </header>
 
-          <div className={styles.grid}>
-            <div className={styles.status}>
-              <BoxerStatus boxer={boxer} />
-            </div>
-            {/* TASK-014: 표시 전용 전투 헤더. 헤더와 BoxerStatus/CombatPanel은 일부 정보가 중복되나,
-                중복 정리는 후속 태스크(강화 패널 정리)로 미룬다. combat이 null이면 내부에서 null 가드. */}
-            <CombatHeader />
-            {/* TASK-018: 타입별 6포즈 애니메이션(표시 전용). boxer/combat null이면 내부에서 null 가드. */}
-            <BoxerFigure />
-            {/* CombatPanel: 보스/몬스터·복서 HP 바, 그로기 바, 전투 피드, 브랜치 @keyframes 모션을 표시한다(009~013 라인). */}
-            <CombatPanel />
-            {/* TASK-015: 전투 컨트롤(AUTO 토글·배속·수동 공격·수동 스킬). combat null이면 내부에서 null 가드. */}
-            <CombatControls />
-            {/* v1.3d: 기본 공격 4종 쿨타임 바. now는 주입 시계(getNow)에서 읽어 Date.now 직접 호출을 피한다. */}
-            {combat && <SkillCooldownBar boxer={boxer} combat={combat} now={getNow()} />}
-            {/* v1.3d: 전용 스킬 슬롯 장착/해제 패널. */}
-            <SkillPanel boxer={boxer} />
-            {/* TASK-017: 파이터 타입 외형 전환 패널(4종 카드). boxer/combat null이면 내부에서 null 가드. */}
-            <TypeSwitchPanel />
-            <UpgradePanel boxer={boxer} />
-          </div>
+          {/* TASK-026: 흩어진 6개 전투 박스(헤더·상태·패널·포즈·컨트롤·쿨)를 단일 무대로 합성.
+              BoxerStatus는 파이터 탭에서 미호출(파일은 보존). 데이터·로직·저장 무변경. */}
+          <CombatStage />
+          {/* TASK-017: 파이터 타입 외형 전환 패널(4종 카드). boxer/combat null이면 내부에서 null 가드. */}
+          <TypeSwitchPanel />
+          <UpgradePanel boxer={boxer} />
+          {/* TASK-026 결정(무대 아래 재배치): 스킬 슬롯 장착/해제 진입점을 무대 아래 별도 섹션으로 유지. */}
+          <SkillPanel boxer={boxer} />
         </>
       )}
 

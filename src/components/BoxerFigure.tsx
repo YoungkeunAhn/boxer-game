@@ -1,10 +1,25 @@
 import { POSE_MAP, poseForKey, resolveAnimationKey } from "../game/animation";
 import { BOXER_TYPE_META, GENDER_META, TYPE_TONE } from "../game/constants";
+import type { BoxerType, Gender } from "../game/types";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./BoxerFigure.module.css";
 
+// 캐릭터 정지 아트(타입×성별 4종). 현재는 idle 1컷이라 포즈와 무관하게 같은 캐릭터 이미지를 보여주고,
+//   동작 연출은 기존 포즈 트랜스폼(.sprite)·포즈 라벨·카운터 버스트로 표현한다.
+//   포즈별 스프라이트 시트가 확정되면 data-animation-key/data-pose 기준으로 프레임을 교체한다(TODO: 아트 교체 태스크).
+const BOXER_IMAGE: Readonly<Record<BoxerType, Record<Gender, string>>> = {
+  INFIGHTER: {
+    MALE: "/sprites/boxer_infighter_male.png",
+    FEMALE: "/sprites/boxer_infighter_female.png",
+  },
+  OUT_BOXER: {
+    MALE: "/sprites/boxer_outboxer_male.png",
+    FEMALE: "/sprites/boxer_outboxer_female.png",
+  },
+};
+
 // 타입/성별 4종 × 6포즈 스프라이트 플레이스홀더(아트 미확정). 키별 이모지로 매핑 구조만 시각화한다.
-//   아트 확정 시 data-animation-key / data-pose 기반으로 실제 스프라이트 시트로 교체한다(TODO).
+//   캐릭터 이미지가 없을 때(에셋 누락)만 이모지로 폴백한다.
 const KEY_EMOJI: Readonly<Record<string, string>> = {
   boxer_idle: "🧍",
   boxer_guard: "🛡️",
@@ -22,7 +37,12 @@ const KEY_EMOJI: Readonly<Record<string, string>> = {
 //   스토어 상태(boxer.boxerType/gender, lastAttack, recentDefense)에서 resolveAnimationKey/POSE_MAP으로
 //   현재 애니 키·포즈·리치·타입 톤을 도출해 data-속성 + 플레이스홀더 스프라이트를 렌더한다(로직 없음).
 //   타입 전환(TASK-017) 시 boxerType이 바뀌면 6포즈 세트(POSE_MAP)와 톤이 함께 교체된다.
-export function BoxerFigure() {
+type BoxerFigureProps = {
+  // CombatStage 링 좌측 슬롯에 끼울 때 자체 테두리/배경/그림자를 벗긴다(표시 전용 — 합성 시 단일 무대 박스 유지).
+  bare?: boolean;
+};
+
+export function BoxerFigure({ bare = false }: BoxerFigureProps = {}) {
   const boxer = useGameStore((state) => state.boxer);
   const combat = useGameStore((state) => state.combat);
   const lastAttack = useGameStore((state) => state.lastAttack);
@@ -40,10 +60,11 @@ export function BoxerFigure() {
   const descriptor = POSE_MAP[boxer.boxerType][pose];
   const tone = TYPE_TONE[boxer.boxerType];
   const isCounter = animationKey === "boxer_counter";
+  const spriteImage = BOXER_IMAGE[boxer.boxerType]?.[boxer.gender];
 
   return (
     <section
-      className={styles.figure}
+      className={`${styles.figure} ${bare ? styles.bare : ""}`}
       data-testid="boxer-figure"
       data-boxer-type={boxer.boxerType}
       data-gender={boxer.gender}
@@ -57,7 +78,11 @@ export function BoxerFigure() {
     >
       <div className={styles.stage}>
         <span className={styles.sprite} aria-hidden="true" data-testid="boxer-figure-sprite">
-          {KEY_EMOJI[animationKey] ?? "🥊"}
+          {spriteImage ? (
+            <img className={styles.spriteImg} src={spriteImage} alt="" draggable={false} />
+          ) : (
+            KEY_EMOJI[animationKey] ?? "🥊"
+          )}
         </span>
         {isCounter && (
           <span className={styles.counterBurst} aria-hidden="true" data-testid="boxer-figure-counter">

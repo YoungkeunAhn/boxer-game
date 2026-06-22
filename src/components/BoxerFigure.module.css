@@ -18,6 +18,18 @@
   overflow: hidden;
 }
 
+/* CombatStage 링 좌측 슬롯에 끼울 때(합성): 자체 박스 크롬을 제거해 단일 무대 박스로 보이게 한다. */
+.bare {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bare .stage {
+  min-height: 96px;
+}
+
 .stage {
   position: relative;
   display: flex;
@@ -41,6 +53,19 @@
   transform-origin: 50% 90%;
   transition: transform 120ms ease-out, filter 120ms ease-out;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+
+/* 캐릭터 정지 아트(이모지 대체). .sprite의 포즈 트랜스폼이 그대로 적용돼 동작감이 유지된다. */
+.spriteImg {
+  display: block;
+  width: auto;
+  height: 132px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.bare .spriteImg {
+  height: 108px;
 }
 
 .poseLabel {

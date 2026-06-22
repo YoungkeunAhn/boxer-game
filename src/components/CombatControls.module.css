@@ -11,6 +11,15 @@
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
 }
 
+/* CombatStage 무대 위 오버레이(합성): 자체 박스 크롬 제거. 버튼 자체 크기/터치 영역은 그대로 유지. */
+.bare {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 8px;
+}
+
 .row {
   display: flex;
   gap: 10px;
