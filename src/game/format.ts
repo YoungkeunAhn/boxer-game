@@ -28,3 +28,31 @@ export function formatCountdown(remainingMs: number): string {
   const seconds = totalSeconds % SECONDS_PER_MINUTE;
   return `${pad2(minutes)}:${pad2(seconds)}`;
 }
+
+// 수치 표시 공통 약어 포맷(골드·다이아·경험치·강화·HP·데미지 등 전부 동일 규칙).
+//   - 1,000 미만: 정수 그대로(예: 0 · 999).
+//   - 1,000 이상: K(천)·M(백만)·B(십억)·T(조) 단위, 항상 소수 1자리(예: 1,000 → 1.0K, 8,000 → 8.0K).
+//     자리 올림으로 단위가 넘치지 않게 floor한다(999,999 → 999.9K, 1000.0K 같은 경계 오류 방지).
+// 음수/비유한 입력은 0으로 안전 처리한다(표시 전용 순수 함수 — Date.now/Math.random 미사용).
+export function formatCompactNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  const n = Math.max(0, Math.floor(value));
+  if (n < 1_000) {
+    return n.toLocaleString();
+  }
+  const units = [
+    { threshold: 1_000_000_000_000, suffix: "T" },
+    { threshold: 1_000_000_000, suffix: "B" },
+    { threshold: 1_000_000, suffix: "M" },
+    { threshold: 1_000, suffix: "K" },
+  ];
+  for (const { threshold, suffix } of units) {
+    if (n >= threshold) {
+      const scaled = Math.floor((n / threshold) * 10) / 10;
+      return `${scaled.toFixed(1)}${suffix}`;
+    }
+  }
+  return n.toLocaleString();
+}

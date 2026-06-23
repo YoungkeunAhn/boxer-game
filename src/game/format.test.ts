@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCountdown } from "./format";
+import { formatCompactNumber, formatCountdown } from "./format";
 
 describe("formatCountdown", () => {
   it("0ms는 00:00을 반환한다", () => {
@@ -36,5 +36,36 @@ describe("formatCountdown", () => {
   it("24시간 직전 큰 값도 HH:MM으로 표시한다", () => {
     // 23시간 59분 59초
     expect(formatCountdown((23 * 3600 + 59 * 60 + 59) * 1_000)).toBe("23:59");
+  });
+});
+
+describe("formatCompactNumber", () => {
+  it("1,000 미만은 정수 그대로", () => {
+    expect(formatCompactNumber(0)).toBe("0");
+    expect(formatCompactNumber(999)).toBe("999");
+  });
+
+  it("1,000 이상은 K/M/B/T 단위로 축약(항상 소수 1자리)", () => {
+    expect(formatCompactNumber(1_000)).toBe("1.0K");
+    expect(formatCompactNumber(8_000)).toBe("8.0K");
+    expect(formatCompactNumber(2_350)).toBe("2.3K");
+    expect(formatCompactNumber(10_000)).toBe("10.0K");
+    expect(formatCompactNumber(128_400)).toBe("128.4K");
+    expect(formatCompactNumber(1_000_000)).toBe("1.0M");
+    expect(formatCompactNumber(363_376_080)).toBe("363.3M");
+    expect(formatCompactNumber(1_000_000_000)).toBe("1.0B");
+    expect(formatCompactNumber(1_000_000_000_000)).toBe("1.0T");
+  });
+
+  it("자리 올림 경계에서 단위가 넘치지 않는다(floor)", () => {
+    expect(formatCompactNumber(9_999)).toBe("9.9K");
+    expect(formatCompactNumber(999_999)).toBe("999.9K");
+    expect(formatCompactNumber(999_999_999)).toBe("999.9M");
+  });
+
+  it("음수/비유한 입력은 안전 처리한다", () => {
+    expect(formatCompactNumber(-5)).toBe("0");
+    expect(formatCompactNumber(Number.NaN)).toBe("0");
+    expect(formatCompactNumber(Number.POSITIVE_INFINITY)).toBe("0");
   });
 });
