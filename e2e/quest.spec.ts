@@ -49,8 +49,8 @@ test.describe("퀘스트 시스템", () => {
     await expect(claimButton).toHaveText("수령");
     await claimButton.click();
 
-    // 보상(7,000골드)이 상단 바 골드에 가산된다(1,000 → 8,000).
-    await expect(currencyGold(page)).toContainText("8,000");
+    // 보상(7,000골드)이 상단 바 골드에 가산된다(1,000 → 8,000 → 축약 8.0K).
+    await expect(currencyGold(page)).toContainText("8.0K");
     // 수령 후 버튼은 ✓(비활성)로 바뀌고 재수령 불가.
     await expect(claimButton).toHaveText("✓");
     await expect(claimButton).toBeDisabled();

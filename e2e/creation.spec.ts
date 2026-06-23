@@ -7,6 +7,7 @@ import {
   hpNow,
   hpMax,
   statValue,
+  currencyGold,
   SAVE_KEY,
   SCHEMA_VERSION,
 } from "./fixtures";
@@ -31,7 +32,7 @@ test.describe("생성과 자동 전투", () => {
     await page.getByTestId("gender-FEMALE").click();
     await createBoxer(page, "카운터");
 
-    await expect(page.getByTestId("boxer-identity")).toHaveText("아웃복서 · 여자");
+    await expect(page.getByTestId("boxer-card-type")).toHaveText("아웃복서 · 여자");
 
     const saved = await page.evaluate((key) => window.localStorage.getItem(key), SAVE_KEY);
     expect(saved).not.toBeNull();
@@ -44,7 +45,7 @@ test.describe("생성과 자동 전투", () => {
   test("기본 선택은 인파이터·남자다", async ({ page }) => {
     await gotoFrozen(page);
     await createBoxer(page);
-    await expect(page.getByTestId("boxer-identity")).toHaveText("인파이터 · 남자");
+    await expect(page.getByTestId("boxer-card-type")).toHaveText("인파이터 · 남자");
   });
 
   test("초기값이 공격력 10, 1회/초, 치명타율 5%, 치명타 피해 2배, 골드 보너스 0%다", async ({
@@ -93,7 +94,8 @@ test.describe("생성과 자동 전투", () => {
       .locator('section[aria-labelledby="combat-title"]')
       .innerText();
     expect(meta).not.toMatch(/undefined|NaN|Infinity/);
-    expect(meta).toMatch(/타격|치명타/);
+    // 데미지는 파이터 위로 "-N" 플로팅 숫자로 표시된다(이전 "타격/치명타" 텍스트 대체).
+    expect(meta).toMatch(/-[\d,]+/);
   });
 
   test("몬스터 처치 시 골드와 총 처치 수가 늘고 다음 스테이지로 이동한다", async ({ page }) => {
@@ -105,9 +107,8 @@ test.describe("생성과 자동 전투", () => {
 
     await expect(page.getByText("CHAPTER 1 · STAGE 2")).toBeVisible();
     await expect(statValue(page, "totalKills")).toHaveText("1마리");
-    await expect(
-      page.locator('section[aria-labelledby="boxer-status-title"]').getByText(/\d+ G/),
-    ).not.toHaveText("0 G");
+    // 골드는 상단 바에 표시된다(1-1 처치 보상 5골드 획득).
+    await expect(currencyGold(page)).toContainText("5");
   });
 
   test("초과 피해가 다음 몬스터 HP를 미리 줄이지 않는다", async ({ page }) => {

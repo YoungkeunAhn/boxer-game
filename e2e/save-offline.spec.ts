@@ -13,13 +13,15 @@ import {
   hpNow,
   hpMax,
   statValue,
+  currencyGold,
   sendToBackground,
   returnToForeground,
   LEGACY_SAVE_KEY,
 } from "./fixtures";
 
-const statusSection = (p: import("@playwright/test").Page) =>
-  p.locator('section[aria-labelledby="boxer-status-title"]');
+// 골드는 상단 바, 복서 이름은 #boxer-status-title(파이터 카드 이름)에 표시된다.
+const boxerName = (p: import("@playwright/test").Page) =>
+  p.locator("#boxer-status-title");
 
 // docs/browser-smoke-checklist.md - 저장, 백그라운드와 오프라인 보상
 test.describe("저장·백그라운드·오프라인", () => {
@@ -30,14 +32,14 @@ test.describe("저장·백그라운드·오프라인", () => {
     // 1-1, 1-2 처치 후 1-3 진행 중까지 진행한다(4종 쿨타임 기준 1-2는 t=15000경 처치).
     await page.clock.runFor(17_000);
     await expect(page.getByText("CHAPTER 1 · STAGE 3")).toBeVisible();
-    const goldBefore = await statusSection(page).getByText(/\d+ G/).innerText();
+    const goldBefore = (await currencyGold(page).textContent()) ?? "";
     const killsBefore = await statValue(page, "totalKills").innerText();
 
     await reloadFrozen(page);
 
-    await expect(statusSection(page).locator("#boxer-status-title")).toHaveText("챔피언");
+    await expect(boxerName(page)).toHaveText("챔피언");
     await expect(page.getByText("CHAPTER 1 · STAGE 3")).toBeVisible();
-    await expect(statusSection(page).getByText(/\d+ G/)).toHaveText(goldBefore);
+    await expect(currencyGold(page)).toHaveText(goldBefore);
     await expect(statValue(page, "totalKills")).toHaveText(killsBefore);
   });
 
@@ -86,9 +88,9 @@ test.describe("저장·백그라운드·오프라인", () => {
     await seedSave(page, { chapter: 1, stage: 1, savedAtMs: Date.parse("2026-01-01T00:00:00.000Z") - nineHoursMs });
     await gotoFrozen(page);
 
-    // 8시간 상한: 처치 10,080 / 골드 50,400 (9시간이면 더 큼).
-    await expect(page.getByText(/자리를 비운 동안 몬스터 10,080마리/)).toBeVisible();
-    await expect(page.getByText(/50,400 골드/)).toBeVisible();
+    // 8시간 상한: 처치 10,080 / 골드 50,400 (9시간이면 더 큼). 표시는 약어(10.0K / 50.4K).
+    await expect(page.getByText(/자리를 비운 동안 몬스터 10\.0K마리/)).toBeVisible();
+    await expect(page.getByText(/50\.4K 골드/)).toBeVisible();
   });
 
   test("v1 저장이 있으면 삭제하지 않고 호환 불가·새 게임 안내가 표시된다", async ({ page }) => {

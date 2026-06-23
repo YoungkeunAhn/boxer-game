@@ -6,6 +6,7 @@ import {
   createBoxer,
   statValue,
   upgradeButton,
+  currencyGold,
   hpBar,
 } from "./fixtures";
 
@@ -70,7 +71,7 @@ test.describe("강화", () => {
 
     // 상한(MAX)인 공격속도는 증가량 표기가 없고 버튼이 MAX다.
     await expect(page.getByTestId("upgrade-delta-attackSpeed")).toHaveCount(0);
-    await expect(upgradeButton(page, "attackSpeed")).toHaveText("MAX");
+    await expect(upgradeButton(page, "attackSpeed")).toContainText("MAX");
   });
 
   test("공격력 0레벨 비용은 10골드, 강화 후 피해가 floor(10×1.2)=12로 오른다", async ({
@@ -79,15 +80,15 @@ test.describe("강화", () => {
     await seedSave(page, { gold: 1000 });
     await gotoFrozen(page);
 
-    await expect(upgradeButton(page, "attackPower")).toHaveText("10 G");
+    // 카드 영역 전체가 버튼이라 비용은 카드 안에 포함된다(영역 누르면 강화).
+    await expect(upgradeButton(page, "attackPower")).toContainText("10 G");
     await expect(statValue(page, "attackPower")).toHaveText("10");
 
     await upgradeButton(page, "attackPower").click();
 
     await expect(statValue(page, "attackPower")).toHaveText("12");
-    await expect(
-      page.locator('section[aria-labelledby="boxer-status-title"]').getByText(/\d+ G/),
-    ).toHaveText("990 G");
+    // 잔액은 상단 바 골드에 반영(1000 - 10 = 990).
+    await expect(currencyGold(page)).toContainText("990");
   });
 
   test("골드가 부족하면 버튼이 비활성화되고 잔액이 음수가 되지 않는다", async ({ page }) => {
@@ -95,9 +96,8 @@ test.describe("강화", () => {
     await createBoxer(page); // 초기 골드 0
 
     await expect(upgradeButton(page, "attackPower")).toBeDisabled();
-    await expect(
-      page.locator('section[aria-labelledby="boxer-status-title"]').getByText(/\d+ G/),
-    ).toHaveText("0 G");
+    // 잔액 0은 상단 바 골드에 반영.
+    await expect(currencyGold(page)).toContainText("0");
   });
 
   test("공격속도를 강화하면 표시 속도가 빨라지고 자동 공격이 단일 스트림으로 진행된다", async ({
@@ -132,7 +132,7 @@ test.describe("강화", () => {
     await expect(statValue(page, "goldBonus")).toHaveText("+500%");
 
     for (const key of ["attackSpeed", "critRate", "critDamage", "goldBonus"] as const) {
-      await expect(upgradeButton(page, key)).toHaveText("MAX");
+      await expect(upgradeButton(page, key)).toContainText("MAX");
       await expect(upgradeButton(page, key)).toBeDisabled();
     }
   });

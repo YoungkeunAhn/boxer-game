@@ -8,7 +8,6 @@ import {
   playerExpBar,
   currencyGold,
   currencyDiamond,
-  dailyResetTimer,
   tabBar,
   tab,
   tabBadge,
@@ -26,7 +25,7 @@ const LOCKED_TABS: TabId[] = ["shop", "bag", "arena"];
 
 // docs/ui/01-공통-레이아웃.md §3-2 — 상단 바 + 하단 5탭 공통 프레임.
 test.describe("탭 네비게이션·상단 바", () => {
-  test("상단 바가 레벨·경험치 바·골드·다이아·일일 타이머를 시드값대로 표시한다", async ({ page }) => {
+  test("상단 바가 레벨·경험치 바·골드·다이아를 시드값대로 표시한다", async ({ page }) => {
     await seedSave(page, {
       gold: 128_400,
       diamond: 2_350,
@@ -37,17 +36,15 @@ test.describe("탭 네비게이션·상단 바", () => {
 
     await expect(topBar(page)).toBeVisible();
     await expect(playerLevel(page)).toHaveText("Lv.45");
-    await expect(currencyGold(page)).toContainText("128,400");
-    await expect(currencyDiamond(page)).toContainText("2,350");
+    // 재화 수치는 1,000 이상이면 약어 표기(128,400 → 128.4K, 2,350 → 2.3K).
+    await expect(currencyGold(page)).toContainText("128.4K");
+    await expect(currencyDiamond(page)).toContainText("2.3K");
 
     // 경험치 바는 progressbar 시맨틱(valuemin/max/now)을 노출한다.
     const expBar = playerExpBar(page);
     await expect(expBar).toHaveAttribute("aria-valuemin", "0");
     expect(Number(await expBar.getAttribute("aria-valuenow"))).toBe(30);
     expect(Number(await expBar.getAttribute("aria-valuemax"))).toBeGreaterThan(0);
-
-    // 일일 리셋 타이머는 MM:SS 또는 HH:MM 포맷을 보인다(⏱ 아이콘 접두 포함).
-    await expect(dailyResetTimer(page)).toHaveText(/\d{2}:\d{2}$/);
   });
 
   test("파이터가 기본 탭이고 전투 화면이 보인다", async ({ page }) => {

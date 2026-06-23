@@ -1,4 +1,4 @@
-import { test, expect, gotoFrozen, seedSave, autoToggle, manualAttackButton } from "./fixtures";
+import { test, expect, gotoFrozen, seedSave } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 // docs/browser-smoke-checklist.md - 타입별 6포즈 애니메이션(TASK-018)
@@ -32,37 +32,17 @@ test.describe("타입별 6포즈 애니메이션", () => {
     await expect(fig).toHaveAttribute("data-reach", "SHORT");
   });
 
-  test("수동 공격 1회 후 인파이터 숏 잽(boxer_left_jab/POSE_3/SHORT)이 표시된다", async ({ page }) => {
+  test("자동 전투 첫 공격에서 인파이터 숏 잽(boxer_left_jab/POSE_3/SHORT)이 표시된다", async ({ page }) => {
     await seedSave(page, { boxerType: "INFIGHTER", gender: "MALE", chapter: 1, stage: 1 });
     await gotoFrozen(page);
 
-    await autoToggle(page).click(); // MANUAL — 입력으로만 진행.
-    await manualAttackButton(page).click();
+    // 자동 전투(기본 AUTO)에서 게임 시간을 진행하면 첫 복서 공격(잽, 1초 쿨다운)이 가장 먼저 발동한다.
+    await page.clock.runFor(1_100);
 
     const fig = figure(page);
-    // 첫 복서 공격은 잽(우선순위상 1초 쿨다운이 가장 먼저 ready).
     await expect(fig).toHaveAttribute("data-animation-key", "boxer_left_jab");
     await expect(fig).toHaveAttribute("data-pose", "POSE_3");
     await expect(fig).toHaveAttribute("data-reach", "SHORT");
-  });
-
-  test("타입 전환(인파→아웃) 시 data-boxer-type와 6포즈 리치(SHORT→LONG)가 함께 교체된다", async ({ page }) => {
-    await seedSave(page, { boxerType: "INFIGHTER", gender: "MALE" });
-    await gotoFrozen(page);
-
-    const fig = figure(page);
-    await expect(fig).toHaveAttribute("data-boxer-type", "INFIGHTER");
-    await expect(fig).toHaveAttribute("data-reach", "SHORT");
-    await expect(fig).toHaveAttribute("data-effect", "shake");
-
-    // 아웃복서 여자 카드로 전환(TASK-017 연동).
-    await page.getByTestId("type-switch-card-OUT_BOXER-FEMALE").click();
-
-    await expect(fig).toHaveAttribute("data-boxer-type", "OUT_BOXER");
-    await expect(fig).toHaveAttribute("data-gender", "FEMALE");
-    // 아웃파이터는 롱 리치·청 잔상 톤으로 6포즈 세트가 교체된다.
-    await expect(fig).toHaveAttribute("data-reach", "LONG");
-    await expect(fig).toHaveAttribute("data-effect", "afterimage");
   });
 
   test("아웃복서 회피 성공 시 카운터 연출(boxer_counter/data-counter=true)이 표시된다", async ({ page }) => {

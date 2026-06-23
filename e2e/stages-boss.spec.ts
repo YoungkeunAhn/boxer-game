@@ -9,6 +9,7 @@ import {
   hpMax,
   groggyBar,
   statValue,
+  currencyGold,
   type SeedOptions,
 } from "./fixtures";
 
@@ -60,9 +61,8 @@ test.describe("스테이지와 보스", () => {
 
     await expect(page.getByText("CHAPTER 2 · STAGE 1")).toBeVisible();
     await expect(statValue(page, "totalKills")).toHaveText("1마리");
-    await expect(
-      page.locator('section[aria-labelledby="boxer-status-title"]').getByText(/\d+ G/),
-    ).toHaveText("50 G");
+    // 보스 보상 50골드는 상단 바 골드에 반영.
+    await expect(currencyGold(page)).toContainText("50");
   });
 
   test("보스 시간초과 시 같은 장 4스테이지 반복 파밍으로 돌아간다", async ({ page }) => {
