@@ -265,6 +265,8 @@ export type GameState = {
   isGroggy: boolean;
   // v1.3d: 스킬 UI/연출용(비저장, 런타임 전용). lastSkill은 직전 틱에 발동한 액티브 스킬(없으면 직전 값 유지).
   lastSkill: SkillId | null;
+  // UI 연출용(비저장): 직전 처치 보상(몬스터 위로 떠오르는 골드 연출). seq는 동일 금액 연속 처치도 재시동하기 위함.
+  lastKillReward: { gold: number; seq: number } | null;
 };
 
 // === TASK-021(P3) 퀘스트 시스템 — 추적 가능한 목표만, 보상은 골드·다이아 ===

@@ -149,6 +149,7 @@ const EMPTY_STATE: GameState = {
   groggyMax: 0,
   isGroggy: false,
   lastSkill: null,
+  lastKillReward: null,
 };
 
 const DEFAULT_DEPENDENCIES: GameStoreDependencies = {
@@ -271,6 +272,8 @@ export function createGameStore(
   let autoBattleRemainderMs = 0;
   // advanceCombat 직전 게임시각(자동 전투 경과 측정 기준). 진행 호출 사이의 게임시간 델타를 분으로 환산한다.
   let lastAdvanceGameAt = initialNow;
+  // UI 연출용: 처치 보상 시퀀스(동일 금액 연속 처치도 애니 재시동하도록 증가시키는 카운터).
+  let killSeq = 0;
 
   // TASK-015: "게임 시간" 시계. combat의 모든 *At 필드는 게임 시간 기준이다.
   //  - 실시간(dependencies.now): 저장·throttle·pause/오프라인 정산용.
@@ -325,6 +328,7 @@ export function createGameStore(
       let recentDefense: MonsterAttackResult | null = get().recentDefense;
       let lastCombo: ComboId | null = get().lastCombo;
       let lastSkill: SkillId | null = get().lastSkill;
+      let lastKillReward = get().lastKillReward;
       let killed = false;
       let bossTimedOut = false;
       let bossDefeated = false;
@@ -375,6 +379,9 @@ export function createGameStore(
           //   레벨업 정산·다이아 보상은 addExpToBoxer 내부에서 순수 처리된다(가정값 — constants.ts).
           if (step.attack.killed) {
             boxer = addExpToBoxer(boxer, stageBossDefeated ? EXP_PER_BOSS_CLEAR : EXP_PER_KILL);
+            // UI 연출용(비저장): 몬스터 위로 떠오르는 획득 골드. seq로 매 처치마다 애니 재시동.
+            killSeq += 1;
+            lastKillReward = { gold: step.attack.goldReward, seq: killSeq };
           }
           // v1.3b: 발동한 콤비네이션이 있으면 직전 발동 콤보로 갱신(연출용). null이면 직전 값 유지.
           if (step.attack.combo) lastCombo = step.attack.combo;
@@ -425,6 +432,7 @@ export function createGameStore(
         comboStep: combat.comboStep,
         lastCombo,
         lastSkill,
+        lastKillReward,
         bossRemainingMs: getBossRemainingMs(combat, now),
         // v1.3c: 보스 그로기 게이지·상태를 노출(combat 런타임에서 파생). 로직 추가 없이 표시용.
         ...getGroggyView(combat, now),

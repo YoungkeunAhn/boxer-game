@@ -12,6 +12,7 @@ import {
   type QuestCumulativeSource,
 } from "../game/quests";
 import { dailyResetRemainingMs, nextWeeklyResetAt } from "../game/progress";
+import { formatCompactNumber } from "../game/format";
 import type { Boxer, QuestCategory, QuestDef, QuestReward, QuestState } from "../game/types";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./QuestPanel.module.css";
@@ -33,8 +34,8 @@ const MILESTONE_MAX = QUEST_MILESTONE_THRESHOLDS[QUEST_MILESTONE_THRESHOLDS.leng
 
 function formatReward(reward: QuestReward): string {
   const parts: string[] = [];
-  if (reward.gold) parts.push(`🪙${reward.gold.toLocaleString()}`);
-  if (reward.diamond) parts.push(`💎${reward.diamond.toLocaleString()}`);
+  if (reward.gold) parts.push(`🪙${formatCompactNumber(reward.gold)}`);
+  if (reward.diamond) parts.push(`💎${formatCompactNumber(reward.diamond)}`);
   return parts.join(" ") || "-";
 }
 
@@ -235,7 +236,7 @@ function QuestRow({ def, questState, source, onClaim, onNavigate }: QuestRowProp
             <div className={styles.progressFill} style={{ width: `${ratio * 100}%` }} />
           </div>
           <span className={styles.progressText} data-testid={`quest-progress-${def.id}`}>
-            {current.toLocaleString()} / {def.target.toLocaleString()}
+            {formatCompactNumber(current)} / {formatCompactNumber(def.target)}
           </span>
         </div>
       </div>

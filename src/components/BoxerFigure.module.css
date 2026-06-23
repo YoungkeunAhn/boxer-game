@@ -55,17 +55,24 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
 }
 
-/* 캐릭터 정지 아트(이모지 대체). .sprite의 포즈 트랜스폼이 그대로 적용돼 동작감이 유지된다. */
-.spriteImg {
+/* 스프라이트 시트에서 한 프레임만 크롭(4열×2행). background-size 400% 200% + 프레임별 position.
+   .sprite의 포즈 트랜스폼이 그대로 적용돼 동작감이 유지된다. */
+.spriteFrame {
   display: block;
-  width: auto;
   height: 132px;
+  aspect-ratio: 362 / 543;
   max-width: 100%;
-  object-fit: contain;
+  background-repeat: no-repeat;
+  background-size: 400% 200%;
 }
 
-.bare .spriteImg {
-  height: 108px;
+.bare .spriteFrame {
+  height: 116px;
+}
+
+/* 링 무대(합성)에서는 포즈 라벨을 숨긴다(목업에 없음 — 정보는 카드/피드로). */
+.bare .poseLabel {
+  display: none;
 }
 
 .poseLabel {

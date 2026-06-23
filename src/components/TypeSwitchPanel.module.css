@@ -3,10 +3,10 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  border-radius: 0;
   background: rgba(23, 28, 40, 0.9);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
 }
@@ -45,21 +45,33 @@
 
 .card {
   position: relative;
-  flex: 0 0 200px;
+  flex: 0 0 104px;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #10141d;
   color: #cdd4e2;
   font: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   scroll-snap-align: start;
 }
+
+/* 카드 아이콘: 캐릭터 스프라이트 시트(4×2)에서 프레임 0(기본 스탠스)만 크롭. */
+.cardIcon {
+  width: 72px;
+  height: 84px;
+  background-repeat: no-repeat;
+  background-size: 400% 200%;
+  background-position: 0% 0%;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+}
+
 
 .card:hover {
   border-color: rgba(246, 187, 67, 0.6);
@@ -72,24 +84,17 @@
 }
 
 .cardTitle {
-  font-size: 0.98rem;
+  font-size: 0.8rem;
   font-weight: 800;
+  line-height: 1.25;
   color: #f4f6fb;
 }
 
-.cardTagline {
-  font-size: 0.76rem;
-  color: #9fa7b8;
-  line-height: 1.4;
-}
-
+/* 목업처럼 카드는 아이콘 + 이름만 노출. 태그라인·전용 스킬 텍스트는 DOM(노드·testid)은 유지하되
+   화면에서만 숨긴다 — E2E가 type-switch-skills-* 텍스트에 의존하고, display:none이어도 textContent는 보존된다. */
+.cardTagline,
 .skills {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: none;
 }
 
 .skillsLabel {

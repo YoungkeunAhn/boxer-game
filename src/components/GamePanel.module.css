@@ -4,7 +4,7 @@
   min-width: 0;
   padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  border-radius: 0;
   background: rgba(23, 28, 40, 0.9);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
 }
@@ -40,7 +40,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .headingRow > * {
@@ -206,20 +206,20 @@
 /* TASK-016: 강화 9종을 공격/방어 두 그룹 탭으로 정돈(표현 전용, 수식·저장 불변). */
 .upgradeTabs {
   display: flex;
-  gap: 8px;
-  margin: 4px 0 12px;
+  gap: 6px;
+  margin: 0 0 8px;
 }
 
 .upgradeTab {
   flex: 1 1 0;
-  min-height: 40px;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 4px 9px;
   border: 1px solid #2b303b;
-  border-radius: 11px;
+  border-radius: 9px;
   color: #929bad;
   background: #10141d;
   font: inherit;
-  font-size: 0.84rem;
+  font-size: 0.74rem;
   font-weight: 800;
   cursor: pointer;
 }
@@ -231,9 +231,137 @@
 }
 
 .upgradeDelta {
-  color: #f7d789;
+  color: #2f8f3e;
+  font-size: 0.6rem;
   font-weight: 800;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+}
+
+/* === 강화 카드 그리드(목업): 카드 영역 전체가 버튼(영역 누르면 강화) === */
+.upgradeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.upgradeGrid[hidden] {
+  display: none;
+}
+
+.upgradeCell {
+  min-width: 0;
+  display: flex;
+}
+
+/* 강화 카드: 프레임 PNG(강화배경)를 배경으로 깔고 어두운 텍스트를 올린다(메인ui1 참고). */
+.upgradeCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  aspect-ratio: 1 / 1;
+  /* 이름·비용은 프레임 위에 절대배치하므로 패딩 없이 프레임 전체를 쓴다. */
+  padding: 0;
+  border: none;
+  background: url("/upgrades/upgrade_card_bg.png") center / 100% 100% no-repeat;
+  color: #4a3a1f;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.04s ease-out, filter 0.04s ease-out;
+}
+
+.upgradeCard:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+
+.upgradeCard:not(:disabled):active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
+}
+
+.upgradeCard:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+  opacity: 0.7;
+}
+
+.upgradeCardIcon {
+  flex: 0 0 auto;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* 전용 아트 아이콘: 카드 중앙에 큼직하게. */
+.upgradeCardIconImg {
+  flex: 0 0 auto;
+  width: 33%;
+  max-width: 42px;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+}
+
+.upgradeCardName {
+  position: absolute;
+  top: 5%;
+  left: 0;
+  right: 0;
+  min-width: 0;
+  font-weight: 850;
+  font-size: 0.74rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.upgradeCardName small {
+  margin-left: 2px;
+  color: #8a7340;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.upgradeCardValue {
+  color: #5c4a28;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* 비용: 프레임 하단 노란 버튼 밴드(약 22%)에 절대배치하고 코인+금액을 그 안에서 가운데 정렬한다.
+   밴드 높이로 정렬하므로 코인 크기를 키워도 항상 버튼 중앙에 맞춰진다. */
+.upgradeCardCost {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 9%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #5a3f12;
+  font-size: 0.8rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* 골드 코인 아이콘: 금액 옆에 큼직하게(텍스트보다 크게). */
+.upgradeCoin {
+  flex: 0 0 auto;
+  width: 1.45em;
+  height: 1.45em;
+  object-fit: contain;
+}
+
+.upgradeCardCostMax {
+  color: #8a7340;
 }
 
 .upgradeList {
@@ -291,6 +419,44 @@
   font-size: 0.82rem;
   font-weight: 900;
   cursor: pointer;
+  transition: transform 0.04s ease-out, filter 0.04s ease-out, box-shadow 0.04s ease-out;
+}
+
+/* 길게 누르는 동안 :active가 유지돼 눌린 상태가 그대로 보인다. */
+.upgradeButton:not(:disabled):active {
+  transform: scale(0.94);
+  filter: brightness(0.9);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* 빠른 탭은 :active가 한두 프레임만 유지돼 놓치기 쉬우므로,
+   누름 시작 시 최소 지속시간이 보장되는 팝 애니메이션을 한 번 재생한다. */
+.upgradeButtonPressed {
+  animation: upgradePress 0.16s ease-out;
+}
+
+@keyframes upgradePress {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(0.92);
+    filter: brightness(0.85);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upgradeButton {
+    transition: none;
+  }
+  .upgradeButtonPressed {
+    animation: none;
+  }
 }
 
 .upgradeButton:disabled {
@@ -484,6 +650,30 @@
   border-radius: inherit;
   background: linear-gradient(90deg, #5f6f8c, #98a7c4);
   transition: width 130ms linear;
+}
+
+/* 무대 아래(bare): 길게 늘어진 줄 대신 4종 한 행의 컴팩트 칩으로 표시한다. */
+.bare .cooldownList {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.bare .cooldownRow {
+  gap: 3px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: rgba(16, 20, 29, 0.92);
+}
+
+.bare .cooldownLabel {
+  flex-direction: column;
+  gap: 0;
+  font-size: 0.6rem;
+  text-align: center;
+}
+
+.bare .cooldownTrack {
+  height: 5px;
 }
 
 .cooldownReady {
@@ -721,12 +911,31 @@
   .panel,
   .topPanel,
   .combatPanel {
-    padding: 18px;
+    padding: 12px;
   }
 
   .headingRow {
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  /* 강화 패널: 목업엔 없는 설명문만 폰에서 숨기고 제목도 줄여 세로를 아낀다(그리드 중심).
+     주의: .eyebrow(= 전투 무대 "CHAPTER N · STAGE M")는 E2E가 toBeVisible로 의존하므로 숨기지 않는다. */
+  .description {
+    display: none;
+  }
+
+  .title {
+    font-size: 1.05rem;
+  }
+
+  .upgradeTabs {
+    margin: 0 0 7px;
+  }
+
+  .upgradeTab {
+    min-height: 28px;
   }
 
   .badge {

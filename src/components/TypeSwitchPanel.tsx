@@ -5,8 +5,19 @@ import {
   GENDER_META,
   TYPE_SKILLS,
 } from "../game/constants";
+import type { BoxerType, Gender } from "../game/types";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./TypeSwitchPanel.module.css";
+
+// 카드 아이콘용 캐릭터 스프라이트(BoxerFigure와 동일 경로 규칙). 시트 프레임 0(기본 스탠스)만 크롭해 보여준다.
+const SPRITE_SLUG: Readonly<Record<BoxerType, string>> = {
+  INFIGHTER: "infighter",
+  OUT_BOXER: "outboxer",
+};
+
+function spriteFor(boxerType: BoxerType, gender: Gender): string {
+  return `/sprites/boxer_${SPRITE_SLUG[boxerType]}_${gender.toLowerCase()}.png`;
+}
 
 // TASK-017: 파이터 타입 외형 전환 패널(프레젠테이셔널). 4종(타입×성별) 카드를 가로 스크롤로 렌더하고
 //   현재 boxer.boxerType/gender 카드를 강조한다. 카드 클릭 시 switchType(type, gender)만 호출한다.
@@ -57,6 +68,11 @@ export function TypeSwitchPanel() {
               aria-pressed={isCurrent}
               onClick={() => switchType(boxerType, gender)}
             >
+              <span
+                className={styles.cardIcon}
+                aria-hidden="true"
+                style={{ backgroundImage: `url("${spriteFor(boxerType, gender)}")` }}
+              />
               <span className={styles.cardTitle}>
                 {BOXER_TYPE_META[boxerType].label} · {GENDER_META[gender].label}
               </span>

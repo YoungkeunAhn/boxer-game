@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { BoxerFigure } from "./BoxerFigure";
 import { CombatControls } from "./CombatControls";
-import { SkillCooldownBar } from "./SkillCooldownBar";
 import {
   BOSS_TIME_LIMIT_MS,
   BOXER_TYPE_META,
@@ -13,9 +12,17 @@ import {
   STAGES_PER_CHAPTER,
 } from "../data/stages";
 import {
+  FX_COUNTER,
+  FX_GROGGY,
+  FX_HIT,
+  monsterImageForStage,
+  ringImageForStage,
+} from "../data/assets";
+import {
   calculateCombatStats,
   calculateMonsterAttackPower,
 } from "../game/formulas";
+import { formatCompactNumber } from "../game/format";
 import type {
   AttackType,
   ComboId,
@@ -26,11 +33,8 @@ import { useGameStore } from "../stores/gameStore";
 import gameStyles from "./GamePanel.module.css";
 import styles from "./CombatStage.module.css";
 
-// TASK-026: 파이터 메인화면 최종 합성.
-//   기존 6개 전투 박스(CombatHeader·BoxerStatus·CombatPanel·BoxerFigure·CombatControls·SkillCooldownBar)를
-//   단일 테두리 <CombatStage> 한 박스로 합성한다. 표시 전용 — 데이터는 전부 기존 셀렉터·순수 함수에서
-//   파생하며 새 계산/로직/타이머를 만들지 않는다. e2e가 의존하는 data-testid·aria 앵커는 같은 의미의
-//   노드에 그대로 보존한다(combat-title 섹션·boxer-status-title 섹션·combat-badge 등).
+// 전투 화면(목업 메인ui1 기준): 헤더(월드맵·진행·카드) → 링 무대(파이터 대치 + 플로팅 데미지/골드 + 코너 컨트롤).
+//   표시 전용 — 데이터는 기존 셀렉터·순수 함수에서 파생한다. e2e 앵커는 같은 의미의 노드에 보존/이전한다.
 
 function formatSeconds(milliseconds: number): string {
   return (Math.max(0, milliseconds) / 1_000).toFixed(1);
@@ -42,14 +46,7 @@ const COMBO_LABELS: Record<ComboId, string> = {
   FULL_COMBO: "풀 콤비네이션",
 };
 
-const DEFENSE_LABELS: Record<DefenseOutcome, string> = {
-  HIT: "피격",
-  GUARD: "GUARD",
-  MISS: "MISS",
-  COUNTER: "COUNTER",
-};
-
-// 표시 계층 전용: (공격 종류·손) → 애니메이션 키. 손 선택 규칙(TASK-007)은 스토어가 결정하고,
+// 표시 계층 전용 (combo): (공격 종류·손) → 애니메이션 키. 손 선택 규칙(TASK-007)은 스토어가 결정하고,
 // 여기서는 그 결과(lastAttack.attackType/hand)를 그대로 키로 매핑만 한다(로직·난수 없음).
 function getAttackAnimKey(attackType: AttackType, hand: Hand): string {
   const side = hand === "LEFT" ? "left" : "right";
@@ -89,11 +86,10 @@ export function CombatStage() {
   const lastCombo = useGameStore((state) => state.lastCombo);
   const lastSkill = useGameStore((state) => state.lastSkill);
   const recentDefense = useGameStore((state) => state.recentDefense);
+  const lastKillReward = useGameStore((state) => state.lastKillReward);
   const retryBoss = useGameStore((state) => state.retryBoss);
-  const getNow = useGameStore((state) => state.getNow);
 
-  // CombatPanel와 동일: 같은 공격/방어 결과가 연속될 때도 CSS 애니메이션을 재시동하기 위한 단조 카운터.
-  //   객체 식별자(스토어가 매 틱 새 객체를 set)가 바뀔 때만 증가시킨다. setState/타이머/난수 없음.
+  // 같은 결과가 연속될 때도 CSS 플로팅 애니메이션을 재시동하기 위한 단조 카운터(객체 식별자 변경 시 증가).
   const attackSeqRef = useRef(0);
   const lastAttackIdRef = useRef<typeof lastAttack>(null);
   if (lastAttack !== lastAttackIdRef.current) {
@@ -110,8 +106,9 @@ export function CombatStage() {
   if (!boxer || !runtime) return null;
 
   const stage = getStageDefinition(runtime.position);
+  const ringImage = ringImageForStage(stage);
+  const monsterImage = monsterImageForStage(stage);
   const monsterAttack = calculateMonsterAttackPower(runtime.position);
-  // TASK-017: 타입 전환이 표시 능력치에 반영되도록 boxerType을 전달한다(typeMultiplier 정합).
   const stats = calculateCombatStats(boxer.upgradeLevels, boxer.boxerType);
 
   const monsterHpPercent = Math.max(0, Math.min(100, (runtime.monsterHp / stage.maxHp) * 100));
@@ -151,8 +148,18 @@ export function CombatStage() {
   const skillEmphasis = lastAttack?.skillTriggered ? gameStyles.motionSkill : "";
   const groggyEmphasis = lastAttack?.groggyBonusApplied ? gameStyles.motionGroggyHit : "";
 
-  // 보스 강공격 WARNING: 기존 상태(monsterAttackPrep)가 세팅될 때만 표시(신규 로직 없음).
   const bossWarning = stage.isBoss && runtime.monsterAttackPrep !== null;
+
+  // 타격 FX(접촉부): 카운터 > 일반 타격. key로 매 이벤트마다 애니 재시동.
+  const isCounterFx = recentDefense?.outcome === "COUNTER";
+  const contactFxSrc = isCounterFx ? FX_COUNTER : lastAttack ? FX_HIT : null;
+  const contactFxKey = isCounterFx
+    ? `c${defenseSeqRef.current}`
+    : `h${attackSeqRef.current}`;
+
+  // 몬스터가 복서에게 입힌 피해(피격 데미지) — HIT/GUARD에서 damage>0일 때 복서 위로 띄운다.
+  const boxerTookDamage =
+    recentDefense && recentDefense.damage > 0 ? recentDefense.damage : null;
 
   // 진행바 점: 인덱스 0~3 = 일반 stage 1~4, 인덱스 4 = 보스 stage 5.
   const currentStage = runtime.position.stage;
@@ -168,79 +175,25 @@ export function CombatStage() {
 
   return (
     <div className={`${styles.stage} ${toneClass}`}>
-      {/* 정체성 스트립: 기존 BoxerStatus의 정보를 단일 무대 상단으로 흡수(중복 박스 제거).
-          e2e 앵커 보존: boxer-status-title 섹션·#boxer-status-title(이름)·골드 'N G'·boxer-identity·
-          stage-meta/stage-position/stage-mode·stat-* 전부 같은 의미 노드에 유지. */}
-      <section className={styles.identity} aria-labelledby="boxer-status-title">
-        <div className={styles.identityHead}>
-          <div className={styles.identityName}>
-            <p className={gameStyles.eyebrow}>My boxer</p>
-            <h2 className={gameStyles.title} id="boxer-status-title">
-              {boxer.name}
-            </h2>
-            <p className={styles.identitySub} data-testid="boxer-identity">
-              {BOXER_TYPE_META[boxer.boxerType].label} · {GENDER_META[boxer.gender].label}
-            </p>
-          </div>
-          <span className={gameStyles.badge}>{boxer.gold.toLocaleString()} G</span>
-        </div>
-
-        <div className={gameStyles.topMeta} data-testid="stage-meta">
-          <div className={gameStyles.topMetaItem}>
-            <span>스테이지</span>
-            <strong data-testid="stage-position">
-              {stage.chapter}-{stage.stage}
-            </strong>
-          </div>
-          <div className={gameStyles.topMetaItem}>
-            <span>챕터</span>
-            <strong>{stage.chapterName}</strong>
-          </div>
-          <div className={gameStyles.topMetaItem}>
-            <span>진행</span>
-            <strong data-testid="stage-mode">
-              {stage.isBoss ? "보스전" : runtime.isFarming ? "파밍" : "전투"}
-            </strong>
-          </div>
-        </div>
-
-        <dl className={styles.stats}>
-          <div className={gameStyles.stat}>
-            <dt>공격력</dt>
-            <dd data-testid="stat-attackPower">{stats.attackPower.toLocaleString()}</dd>
-          </div>
-          <div className={gameStyles.stat}>
-            <dt>공격속도</dt>
-            <dd data-testid="stat-attackSpeed">{stats.attackSpeed.toFixed(1)}회/초</dd>
-          </div>
-          <div className={gameStyles.stat}>
-            <dt>치명타율</dt>
-            <dd data-testid="stat-critRate">{Math.round(stats.critRate * 100)}%</dd>
-          </div>
-          <div className={gameStyles.stat}>
-            <dt>치명타 피해</dt>
-            <dd data-testid="stat-critDamage">{stats.critDamage.toFixed(1)}배</dd>
-          </div>
-          <div className={gameStyles.stat}>
-            <dt>골드 보너스</dt>
-            <dd data-testid="stat-goldBonus">+{Math.round(stats.goldBonus * 100)}%</dd>
-          </div>
-          <div className={gameStyles.stat}>
-            <dt>총 처치</dt>
-            <dd data-testid="stat-totalKills">{boxer.totalKills.toLocaleString()}마리</dd>
-          </div>
-        </dl>
-      </section>
-
-      {/* A. 월드맵 바 + 5칸 진행바 (CombatHeader topRow/progress 흡수). */}
       <section
         className={styles.combat}
         data-testid="combat-header"
         aria-labelledby="combat-title"
         data-boxer-type={boxer.boxerType}
       >
+        {/* 링 무대(단일 합성, 목업 메인ui1): 아레나 배경 위에 헤더·HP카드·파이터·컨트롤을 모두 오버레이한다.
+            헤더/카드는 별도 박스가 아니라 무대 상단에 얹는다 → 전투 영역 하나로 합쳐 세로를 최소화. */}
+        <div className={`${styles.ring} ${boxer.boxerType === "INFIGHTER" ? gameStyles.arenaShake : ""}`}>
+          <div
+            className={styles.ringBg}
+            style={{ backgroundImage: `url("${ringImage}")` }}
+            aria-hidden="true"
+          />
+
+          {/* 상단 오버레이: 최소화한 챕터/스테이지 헤더 + 진행 점 + HP 카드(반투명, 아레나 위). */}
+          <div className={styles.topOverlay}>
+        {/* 헤더 줄: 월드맵 · 스테이지 · 처치수 · 처음부터 · 배지 */}
         <div className={styles.worldRow}>
-          {/* TODO(후속): 월드맵 선택/재방문 화면. 이번 태스크는 표기만(비활성). */}
           <button
             type="button"
             className={styles.worldMapButton}
@@ -254,10 +207,13 @@ export function CombatStage() {
           <span className={styles.stageLabel} data-testid="stage-label">
             {stageLabel}
           </span>
-          <span
-            className={`${gameStyles.badge} ${stage.isBoss ? gameStyles.bossBadge : ""} ${styles.badge}`}
-            data-testid="combat-badge"
-          >
+          <span className={styles.kills}>
+            처치 <strong data-testid="stat-totalKills">{formatCompactNumber(boxer.totalKills)}마리</strong>
+          </span>
+          {/* 배속 토글(작게) — 헤더 줄 우측에 배치. */}
+          <CombatControls bare />
+          {/* 전투 상태 배지: 화면에는 숨기되(요청) data-testid·텍스트는 보존 — E2E가 toHaveText로 의존. */}
+          <span className={styles.badge} data-testid="combat-badge">
             {stage.isBoss ? "BOSS" : runtime.isFarming ? "파밍 중" : "자동 전투"}
           </span>
         </div>
@@ -288,8 +244,6 @@ export function CombatStage() {
           ))}
         </div>
 
-        {/* combat-title 앵커(섹션 라벨). 현재 상대 몬스터명을 무대 제목으로 노출한다(가시 노드 — 탭 판정/E2E 의존).
-            챕터 테마명은 아래 몬스터 카드(cardSub)에서 한 번만 노출한다(중복 텍스트 → strict-mode 위반 방지). */}
         <div className={styles.combatTitleRow}>
           <p className={gameStyles.eyebrow}>
             CHAPTER {runtime.position.chapter} · STAGE {runtime.position.stage}
@@ -299,21 +253,36 @@ export function CombatStage() {
           </h2>
         </div>
 
-        {/* B. 파이터 카드(좌) VS 몬스터 카드(우) (CombatHeader cards 흡수). */}
+        {/* 파이터 정보 카드(맵 상단): 이름·타입·HP바·공격력. HP 게이지(boxer-hp/monster-hp)를 카드로 이전. */}
         <div className={styles.cards}>
           <div className={styles.card} data-testid="boxer-card">
             <p className={styles.cardEyebrow}>BOXER</p>
-            <p className={styles.cardName} data-testid="boxer-card-name">
+            <p className={styles.cardName} id="boxer-status-title" data-testid="boxer-card-name">
               {boxer.name}
             </p>
             <p className={styles.cardSub} data-testid="boxer-card-type">
               {BOXER_TYPE_META[boxer.boxerType].label} · {GENDER_META[boxer.gender].label}
             </p>
+            <div
+              className={styles.cardHpBar}
+              role="progressbar"
+              data-testid="boxer-hp"
+              aria-label="복서 체력"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(runtime.boxerMaxHp)}
+              aria-valuenow={Math.max(0, Math.round(runtime.boxerHp))}
+            >
+              <div
+                className={`${styles.cardHpFill} ${styles.cardHpFillBoxer}`}
+                style={{ width: `${boxerHpPercent}%` }}
+              />
+            </div>
             <p className={styles.cardHp} data-testid="boxer-card-hp">
-              ❤ {runtime.boxerHp.toLocaleString()} / {runtime.boxerMaxHp.toLocaleString()}
+              ❤ {formatCompactNumber(Math.max(0, Math.round(runtime.boxerHp)))} /{" "}
+              {formatCompactNumber(Math.round(runtime.boxerMaxHp))}
             </p>
             <p className={styles.cardAttack} data-testid="boxer-card-attack">
-              🔥 {stats.attackPower.toLocaleString()}
+              🔥 {formatCompactNumber(stats.attackPower)}
             </p>
           </div>
 
@@ -330,28 +299,60 @@ export function CombatStage() {
               {stage.monsterName}
             </p>
             <p className={styles.cardSub}>{stage.chapterName}</p>
+            <div
+              className={styles.cardHpBar}
+              role="progressbar"
+              data-testid="monster-hp"
+              aria-label={`${stage.monsterName} 체력`}
+              aria-valuemin={0}
+              aria-valuemax={stage.maxHp}
+              aria-valuenow={runtime.monsterHp}
+            >
+              <div className={styles.cardHpFill} style={{ width: `${monsterHpPercent}%` }} />
+            </div>
             <p className={styles.cardHp} data-testid="monster-card-hp">
-              ❤ {runtime.monsterHp.toLocaleString()} / {stage.maxHp.toLocaleString()}
+              ❤ {formatCompactNumber(runtime.monsterHp)} / {formatCompactNumber(stage.maxHp)}
             </p>
             <p className={styles.cardAttack} data-testid="monster-card-attack">
-              🔥 {monsterAttack.toLocaleString()}
+              🔥 {formatCompactNumber(monsterAttack)}
             </p>
           </div>
         </div>
-
-        {/* C. 링 무대: BoxerFigure(좌) · 몬스터 아바타(우) + 무대 위 오버레이. */}
-        <div className={`${styles.ring} ${boxer.boxerType === "INFIGHTER" ? gameStyles.arenaShake : ""}`}>
-          {/* 우상단 오버레이: AUTO/배속/수동 컨트롤. */}
-          <div className={styles.overlayControls}>
-            <CombatControls bare />
           </div>
+          {/* ── 상단 오버레이 끝 ── */}
+
+          {/* 보스 제한시간 · 그로기 게이지: 무대 상단 오버레이. */}
+          {stage.isBoss && (
+            <div className={styles.bossOverlay}>
+              <strong
+                className={styles.bossTimer}
+                data-testid="boss-timer"
+                aria-label={`보스 제한 시간 ${formatSeconds(bossRemainingMs)}초`}
+              >
+                {formatSeconds(bossRemainingMs)}초
+              </strong>
+              {groggyActive && (
+                <div
+                  className={styles.groggyBar}
+                  role="progressbar"
+                  data-testid="groggy-bar"
+                  aria-label="보스 그로기"
+                  aria-valuemin={0}
+                  aria-valuemax={Math.round(runtime.groggyMax)}
+                  aria-valuenow={Math.round(runtime.groggyGauge)}
+                >
+                  <div
+                    className={`${styles.groggyFill} ${isGroggy ? styles.groggyActive : ""}`}
+                    style={{ width: `${groggyPercent}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={styles.ringRow}>
             <div className={styles.figureSlot} data-testid="arena-boxer">
-              {/* 좌측 슬롯: 타입별 6포즈 스프라이트(아트 끼울 자리: data-animation-key/data-pose 유지). */}
               <BoxerFigure bare />
-              {/* CombatPanel가 노출하던 avatar 모션 키 노드를 보존한다(presentation/animation spec의
-                  arena-boxer 하위 [data-attack-key] 매핑 검증용). 시각적으로는 숨김. */}
               <span
                 key={`boxer-anim-${animSeq}`}
                 className={`${gameStyles.srOnly} ${avatarMotionClass} ${skillEmphasis} ${groggyEmphasis}`}
@@ -362,33 +363,71 @@ export function CombatStage() {
               >
                 🥊
               </span>
+              {/* 복서 피격 데미지(잠깐 떴다 사라짐). */}
+              {boxerTookDamage !== null && (
+                <span
+                  key={`bdmg-${defenseSeqRef.current}`}
+                  className={`${styles.floatDamage} ${styles.floatDamageBoxer}`}
+                  aria-hidden="true"
+                >
+                  -{formatCompactNumber(boxerTookDamage)}
+                </span>
+              )}
             </div>
 
-            <span className={styles.ringVersus} aria-hidden="true">VS</span>
-
             <div className={styles.monsterSlot} data-testid="arena-monster">
-              <div
-                className={`${gameStyles.avatar} ${gameStyles.avatarMonster} ${isGroggy ? gameStyles.avatarGroggy : ""}`}
+              <img
+                className={`${styles.monsterImg} ${stage.isBoss ? styles.monsterBoss : ""} ${isGroggy ? gameStyles.avatarGroggy : ""}`}
+                src={monsterImage}
+                alt=""
+                draggable={false}
                 aria-hidden="true"
-              >
-                {stage.isBoss ? "👹" : "👾"}
-              </div>
-              <span className={styles.fighterName}>{stage.monsterName}</span>
+              />
+              {/* 몬스터 피격 데미지(복서의 타격) — 잠깐 떴다 사라짐. */}
+              {lastAttack && (
+                <span
+                  key={`mdmg-${attackSeqRef.current}`}
+                  className={`${styles.floatDamage} ${lastAttack.isCritical ? styles.floatCrit : ""}`}
+                  data-testid="feed-damage"
+                >
+                  -{formatCompactNumber(lastAttack.damage)}
+                </span>
+              )}
+              {/* 처치 시 획득 골드(몬스터 위로 떠오름) — 잠깐 떴다 사라짐. */}
+              {lastKillReward && (
+                <span
+                  key={`gold-${lastKillReward.seq}`}
+                  className={styles.floatGold}
+                  aria-hidden="true"
+                >
+                  +{formatCompactNumber(lastKillReward.gold)} G
+                </span>
+              )}
             </div>
           </div>
 
-          {/* 중앙 오버레이: 데미지/콤보/스킬/방어 피드. */}
+          {contactFxSrc && (
+            <img
+              key={`fx-${contactFxKey}`}
+              className={`${styles.fx} ${isCounterFx ? styles.fxCounter : styles.fxHit}`}
+              src={contactFxSrc}
+              alt=""
+              draggable={false}
+              aria-hidden="true"
+            />
+          )}
+          {isGroggy && (
+            <img
+              className={`${styles.fx} ${styles.fxGroggy}`}
+              src={FX_GROGGY}
+              alt=""
+              draggable={false}
+              aria-hidden="true"
+            />
+          )}
+
+          {/* 콤보·스킬 텍스트 피드(연출용, 상단 중앙). 데미지 숫자는 파이터 위로 분리됐다. */}
           <div className={styles.overlayFeed} data-testid="combat-feed" aria-live="polite">
-            {lastAttack && (
-              <span
-                key={`dmg-${attackSeqRef.current}`}
-                className={`${lastAttack.isCritical ? gameStyles.critical : gameStyles.feedDamage} ${gameStyles.feedPop}`}
-                data-testid="feed-damage"
-              >
-                {lastAttack.isCritical ? "치명타! " : "타격 "}
-                {lastAttack.damage.toLocaleString()}
-              </span>
-            )}
             {lastCombo && (
               <span className={`${gameStyles.feedCombo} ${gameStyles.feedPop}`} data-testid="feed-combo">
                 {COMBO_LABELS[lastCombo]}
@@ -399,116 +438,28 @@ export function CombatStage() {
                 {getSkill(lastSkill).name}
               </span>
             )}
-            {recentDefense && recentDefense.outcome !== "HIT" && (
-              <span
-                key={`def-${defenseSeqRef.current}`}
-                className={`${gameStyles.feedDefense} ${gameStyles.feedPop} ${gameStyles[`defense_${recentDefense.outcome}`] ?? ""}`}
-                data-testid="feed-defense"
-                data-outcome={recentDefense.outcome}
+          </div>
+
+          {bossWarning && (
+            <div className={gameStyles.bossWarning} data-testid="boss-warning" role="status">
+              ⚠ WARNING
+            </div>
+          )}
+
+          {/* 무대 우하단 코너: 보스 재도전 버튼(파밍 중에만). */}
+          {runtime.isFarming && (
+            <div className={styles.controlsBar}>
+              <button
+                type="button"
+                className={styles.retryButtonFarming}
+                onClick={retryBoss}
+                aria-label={`보스 다시 도전하기 (${Math.round(BOSS_TIME_LIMIT_MS / 1_000)}초)`}
               >
-                {DEFENSE_LABELS[recentDefense.outcome]}
-              </span>
-            )}
-          </div>
-
-          {/* 우하단 오버레이: 기본 공격 4종 쿨타임(원형/바). now는 주입 시계에서 읽는다. */}
-          <div className={styles.overlayCooldown}>
-            <SkillCooldownBar boxer={boxer} combat={runtime} now={getNow()} bare />
-          </div>
-        </div>
-
-        {bossWarning && (
-          <div className={gameStyles.bossWarning} data-testid="boss-warning" role="status">
-            ⚠ WARNING
-          </div>
-        )}
-
-        {/* HP/그로기 상태 바: 링 하단. */}
-        <div className={gameStyles.health}>
-          <div className={gameStyles.healthLabel}>
-            <span>복서 HP</span>
-            <strong>
-              {Math.max(0, Math.round(runtime.boxerHp)).toLocaleString()} /{" "}
-              {Math.round(runtime.boxerMaxHp).toLocaleString()}
-            </strong>
-          </div>
-          <div
-            className={gameStyles.healthTrack}
-            role="progressbar"
-            data-testid="boxer-hp"
-            aria-label="복서 체력"
-            aria-valuemin={0}
-            aria-valuemax={Math.round(runtime.boxerMaxHp)}
-            aria-valuenow={Math.max(0, Math.round(runtime.boxerHp))}
-          >
-            <div className={`${gameStyles.healthFill} ${gameStyles.boxerHpFill}`} style={{ width: `${boxerHpPercent}%` }} />
-          </div>
-        </div>
-
-        <div className={gameStyles.health}>
-          <div className={gameStyles.healthLabel}>
-            <span>몬스터 HP</span>
-            <strong>
-              {runtime.monsterHp.toLocaleString()} / {stage.maxHp.toLocaleString()}
-            </strong>
-          </div>
-          <div
-            className={gameStyles.healthTrack}
-            role="progressbar"
-            data-testid="monster-hp"
-            aria-label={`${stage.monsterName} 체력`}
-            aria-valuemin={0}
-            aria-valuemax={stage.maxHp}
-            aria-valuenow={runtime.monsterHp}
-          >
-            <div className={gameStyles.healthFill} style={{ width: `${monsterHpPercent}%` }} />
-          </div>
-        </div>
-
-        {groggyActive && (
-          <div className={gameStyles.health} data-testid="groggy">
-            <div className={gameStyles.healthLabel}>
-              <span>{isGroggy ? "그로기!" : "그로기 게이지"}</span>
-              <strong>
-                {Math.round(runtime.groggyGauge).toLocaleString()} /{" "}
-                {Math.round(runtime.groggyMax).toLocaleString()}
-              </strong>
+                보스 재도전
+              </button>
             </div>
-            <div
-              className={gameStyles.healthTrack}
-              role="progressbar"
-              data-testid="groggy-bar"
-              aria-label="보스 그로기"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(runtime.groggyMax)}
-              aria-valuenow={Math.round(runtime.groggyGauge)}
-            >
-              <div
-                className={`${gameStyles.healthFill} ${gameStyles.groggyFill} ${isGroggy ? gameStyles.groggyActive : ""}`}
-                style={{ width: `${groggyPercent}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 하단 상태줄: 기본 보상 + 보스 타이머. */}
-        <div className={gameStyles.combatMeta}>
-          <span>기본 보상 {stage.goldReward.toLocaleString()} 골드</span>
-          {stage.isBoss && (
-            <strong
-              data-testid="boss-timer"
-              aria-label={`보스 제한 시간 ${formatSeconds(bossRemainingMs)}초`}
-            >
-              {formatSeconds(bossRemainingMs)}초
-            </strong>
           )}
         </div>
-
-        {runtime.isFarming && (
-          <button className={gameStyles.button} type="button" onClick={retryBoss}>
-            보스 다시 도전하기 ({Math.round(BOSS_TIME_LIMIT_MS / 1_000)}초)
-          </button>
-        )}
       </section>
     </div>
   );

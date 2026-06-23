@@ -1,61 +1,47 @@
-import { useEffect, useState } from "react";
-import { formatCountdown } from "../game/format";
+import { CURRENCY_GOLD } from "../data/assets";
+import { formatCompactNumber } from "../game/format";
 import type { Boxer } from "../game/types";
 import {
-  selectDailyResetRemainingMs,
   selectExpProgress,
   selectExpToNext,
-  useGameStore,
 } from "../stores/gameStore";
 import styles from "./TopBar.module.css";
 
 type TopBarProps = {
   boxer: Boxer;
+  // 재화 캡슐 '+' 버튼 동작(상점 진입 시도). 상점 보류 상태라 진입은 차단되고 안내만 뜬다.
+  onOpenShop?: () => void;
 };
 
-// 일일 리셋 타이머 표시 갱신 주기(ms). React 리렌더 트리거 전용 — 게임 로직/저장과 무관하다.
-const TIMER_TICK_MS = 1_000;
-
-// 프로필 아바타 이니셜(이모지/한 글자). 이름 첫 글자를 그대로 쓴다(공백이면 🥊).
-function avatarGlyph(name: string): string {
-  const trimmed = name.trim();
-  return trimmed.length > 0 ? Array.from(trimmed)[0] : "🥊";
+// 프로필 아바타 = 현재 복서 스프라이트(타입×성별)의 idle 프레임 머리 부분 크롭(초상).
+function avatarSprite(boxer: Boxer): string {
+  const type = boxer.boxerType === "OUT_BOXER" ? "outboxer" : "infighter";
+  const gender = boxer.gender === "FEMALE" ? "female" : "male";
+  return `/sprites/boxer_${type}_${gender}.png`;
 }
 
-// TASK-020(P3): 모든 화면 공통 상단 바. 프레젠테이셔널 — 스토어 셀렉터/주입 now로만 구동한다.
-//   좌측: 프로필·복서 이름·플레이어 레벨(Lv)·경험치 바(%). 우측 재화: [🪙골드][💎다이아][⏱일일리셋].
-//   일일 타이머는 주입 now(getNow) 기반 순수 파생(selectDailyResetRemainingMs)을 1초 간격으로 다시 읽어
-//   표시만 갱신한다(Date.now 직접 호출 금지 — getNow는 가짜 클럭/실시계를 동일하게 따른다).
-export function TopBar({ boxer }: TopBarProps) {
-  const getNow = useGameStore((state) => state.getNow);
-
+// TASK-020(P3): 모든 화면 공통 상단 바. 프레젠테이셔널 — 스토어 셀렉터로만 구동한다.
+//   좌측: 프로필·복서 이름·플레이어 레벨(Lv)·경험치 바(%). 우측 재화: [🪙골드][💎다이아].
+export function TopBar({ boxer, onOpenShop }: TopBarProps) {
   const expToNext = selectExpToNext(boxer);
   const expProgress = selectExpProgress(boxer);
   const expPercent = Math.round(expProgress * 100);
 
-  // 표시 갱신용 now. 1초마다 주입 now를 다시 읽어 타이머만 리렌더한다(게임 상태 변경 없음).
-  const [now, setNow] = useState(() => getNow());
-  useEffect(() => {
-    setNow(getNow());
-    const id = setInterval(() => setNow(getNow()), TIMER_TICK_MS);
-    return () => clearInterval(id);
-  }, [getNow]);
-
-  const dailyResetRemainingMs = selectDailyResetRemainingMs(now);
-  const dailyResetLabel = formatCountdown(dailyResetRemainingMs);
-
   return (
     <header className={styles.topBar} data-testid="top-bar">
       <div className={styles.profile}>
-        <span className={styles.avatar} aria-hidden="true">
-          {avatarGlyph(boxer.name)}
-        </span>
+        <span
+          className={styles.avatar}
+          style={{ backgroundImage: `url("${avatarSprite(boxer)}")` }}
+          aria-hidden="true"
+        />
         <div className={styles.identity}>
           <span className={styles.name}>{boxer.name}</span>
-          <div className={styles.levelRow}>
-            <span className={styles.level} data-testid="player-level">
-              Lv.{boxer.playerLevel.toLocaleString()}
-            </span>
+          <span className={styles.level} data-testid="player-level">
+            Lv.{formatCompactNumber(boxer.playerLevel)}
+          </span>
+          {/* 경험치는 레벨 아래 줄에 progress bar로 표시. */}
+          <div className={styles.expRow}>
             <div
               className={styles.expTrack}
               data-testid="player-exp-bar"
@@ -67,27 +53,45 @@ export function TopBar({ boxer }: TopBarProps) {
             >
               <div className={styles.expFill} style={{ width: `${expPercent}%` }} />
             </div>
+            <span className={styles.expPercent}>{expPercent}%</span>
           </div>
         </div>
       </div>
 
       <div className={styles.wallet}>
-        <span className={styles.currency} data-testid="currency-gold">
-          <span aria-hidden="true">🪙</span>
-          {boxer.gold.toLocaleString()}
-        </span>
-        <span className={styles.currency} data-testid="currency-diamond">
-          <span aria-hidden="true">💎</span>
-          {boxer.diamond.toLocaleString()}
-        </span>
-        <span
-          className={styles.currency}
-          data-testid="daily-reset-timer"
-          title="일일 리셋까지 남은 시간"
-        >
-          <span aria-hidden="true">⏱</span>
-          {dailyResetLabel}
-        </span>
+        {/* 골드·다이아 캡슐은 통째로 '+' 버튼(상점 진입 시도). 44px 터치 영역 보장.
+            골드는 좁은 바에 맞춰 축약 표시(128.4K), 다이아는 목업처럼 전체 수 표시. */}
+        <div>
+          <button
+            type="button"
+            className={styles.currency}
+            data-testid="currency-gold"
+            onClick={onOpenShop}
+            aria-label={`골드 ${boxer.gold.toLocaleString()} · 더 얻기`}
+          >
+            <img
+              className={styles.currencyIcon}
+              src={CURRENCY_GOLD}
+              alt=""
+              aria-hidden="true"
+            />
+            <span className={styles.currencyValue}>{formatCompactNumber(boxer.gold)}</span>
+            <span className={styles.plus} aria-hidden="true">+</span>
+          </button>
+        </div>
+        <div>
+          <button
+            type="button"
+            className={styles.currency}
+            data-testid="currency-diamond"
+            onClick={onOpenShop}
+            aria-label={`다이아 ${boxer.diamond.toLocaleString()} · 더 얻기`}
+          >
+            <span aria-hidden="true">💎</span>
+            <span className={styles.currencyValue}>{formatCompactNumber(boxer.diamond)}</span>
+            <span className={styles.plus} aria-hidden="true">+</span>
+          </button>
+        </div>
       </div>
     </header>
   );

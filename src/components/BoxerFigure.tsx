@@ -1,4 +1,9 @@
-import { POSE_MAP, poseForKey, resolveAnimationKey } from "../game/animation";
+import {
+  POSE_MAP,
+  poseForKey,
+  resolveAnimationKey,
+  type AnimationKey,
+} from "../game/animation";
 import { BOXER_TYPE_META, GENDER_META, TYPE_TONE } from "../game/constants";
 import type { BoxerType, Gender } from "../game/types";
 import { useGameStore } from "../stores/gameStore";
@@ -17,6 +22,34 @@ const BOXER_IMAGE: Readonly<Record<BoxerType, Record<Gender, string>>> = {
     FEMALE: "/sprites/boxer_outboxer_female.png",
   },
 };
+
+// 스프라이트 시트 레이아웃: 1448×1086 = 4열 × 2행 = 8프레임(프레임 ≈ 362×543).
+//   시트를 통째로 그리면 8캐릭터가 격자로 보이므로, 애니 키마다 한 프레임만 잘라 한 캐릭터로 보이게 한다.
+//   프레임 배치(좌→우, 위→아래): 0 기본스탠스 · 1 스텝/풋워크 · 2 가드 · 3 스트레이트 /
+//   4 잽 · 5 훅 · 6 어퍼 · 7 카운터.
+const SHEET_COLS = 4;
+const SHEET_ROWS = 2;
+const KEY_FRAME: Readonly<Record<AnimationKey, number>> = {
+  boxer_idle: 0,
+  boxer_dodge: 1,
+  boxer_guard: 2,
+  boxer_right_straight: 3,
+  boxer_left_jab: 4,
+  boxer_left_hook: 5,
+  boxer_right_hook: 6,
+  boxer_left_upper: 6,
+  boxer_right_upper: 6,
+  boxer_counter: 7,
+};
+
+// 프레임 인덱스 → background-position(%) 문자열. background-size 400% 200%와 짝을 이뤄 한 칸만 노출한다.
+function frameBackgroundPosition(index: number): string {
+  const col = index % SHEET_COLS;
+  const row = Math.floor(index / SHEET_COLS);
+  const x = SHEET_COLS > 1 ? (col / (SHEET_COLS - 1)) * 100 : 0;
+  const y = SHEET_ROWS > 1 ? (row / (SHEET_ROWS - 1)) * 100 : 0;
+  return `${x}% ${y}%`;
+}
 
 // 타입/성별 4종 × 6포즈 스프라이트 플레이스홀더(아트 미확정). 키별 이모지로 매핑 구조만 시각화한다.
 //   캐릭터 이미지가 없을 때(에셋 누락)만 이모지로 폴백한다.
@@ -77,9 +110,21 @@ export function BoxerFigure({ bare = false }: BoxerFigureProps = {}) {
       aria-label={`${BOXER_TYPE_META[boxer.boxerType].label} ${GENDER_META[boxer.gender].label} · ${descriptor.labelKo}`}
     >
       <div className={styles.stage}>
-        <span className={styles.sprite} aria-hidden="true" data-testid="boxer-figure-sprite">
+        <span
+          className={styles.sprite}
+          aria-hidden="true"
+          data-testid="boxer-figure-sprite"
+          data-frame={spriteImage ? KEY_FRAME[animationKey] : undefined}
+        >
           {spriteImage ? (
-            <img className={styles.spriteImg} src={spriteImage} alt="" draggable={false} />
+            // 시트에서 현재 애니 키에 해당하는 한 프레임만 크롭해 노출(통짜 렌더 금지).
+            <span
+              className={styles.spriteFrame}
+              style={{
+                backgroundImage: `url("${spriteImage}")`,
+                backgroundPosition: frameBackgroundPosition(KEY_FRAME[animationKey]),
+              }}
+            />
           ) : (
             KEY_EMOJI[animationKey] ?? "🥊"
           )}

@@ -1,42 +1,45 @@
+/* 상단 바 — 한 줄 배치(줄바꿈 없음). 배경은 차콜, 재화 캡슐은 검정+골드테(목업 메인ui2). */
 .topBar {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid #262c39;
-  border-radius: 14px;
-  background: rgba(18, 23, 33, 0.92);
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #4a4e57;
+  border-radius: 0;
+  background: linear-gradient(180deg, #41454c, #34373d);
 }
 
 .profile {
   display: flex;
   min-width: 0;
-  flex: 1 1 200px;
+  flex: 1 1 auto;
   align-items: center;
   gap: 10px;
 }
 
+/* 둥근 사각 초상 — 현재 복서 스프라이트 idle 프레임의 머리 부분만 크롭(시트 4×2 중 0번 프레임 상단). */
 .avatar {
-  display: grid;
   flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(140deg, #f6bb43, #d2751c);
-  color: #1a1205;
-  font-size: 1.1rem;
-  font-weight: 900;
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  border: 2px solid #f6bb43;
+  background-color: #15171c;
+  background-repeat: no-repeat;
+  background-size: 760% 510%;
+  background-position: 8% 17%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
+/* 이름(1줄) → 레벨(2줄) → 경험치 progress bar(3줄). 세로로 쌓는다. */
 .identity {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .name {
@@ -48,29 +51,29 @@
   text-overflow: ellipsis;
 }
 
-.levelRow {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
 .level {
-  flex: 0 0 auto;
   color: #f6bb43;
   font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0.02em;
 }
 
+/* 경험치 줄(레벨 아래) — progress bar + 퍼센트. */
+.expRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .expTrack {
   position: relative;
   min-width: 0;
-  flex: 1 1 80px;
-  height: 8px;
+  flex: 1 1 90px;
+  height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: #2a3140;
+  background: #23262c;
 }
 
 .expFill {
@@ -80,44 +83,83 @@
   transition: width 0.25s ease;
 }
 
+.expPercent {
+  flex: 0 0 auto;
+  color: #ff7a5c;
+  font-size: 0.7rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
 .wallet {
   display: flex;
   min-width: 0;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
+/* 재화 표시(골드·다이아). 테두리·배경 없이 아이콘 + 숫자 + '+' 배지만 노출한다. */
 .currency {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border: 1px solid #2c3343;
-  border-radius: 10px;
-  background: rgba(30, 36, 48, 0.9);
-  color: #e6e9f0;
-  font-size: 0.8rem;
+  gap: 4px;
+  padding: 0 2px 0 4px;
+  border: 0;
+  background: transparent;
+  color: #f2e6c9;
+  font: inherit;
+  font-size: 0.78rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 골드 코인 아이콘 — 이모지 자리를 대체. 픽셀 아트 선명하게 렌더. */
+.currencyIcon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.currencyValue {
+  line-height: 1;
+}
+
+/* '+' 배지 — 캡슐 우측 노란 작은 사각 버튼(목업). */
+.plus {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffd35a, #f0a020);
+  color: #1a1205;
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 @media (max-width: 420px) {
   .topBar {
-    padding: 9px 11px;
-    gap: 10px;
-  }
-
-  .wallet {
-    flex: 1 1 100%;
-    justify-content: space-between;
+    padding: 7px 10px;
+    gap: 8px;
   }
 
   .currency {
-    padding: 5px 8px;
-    font-size: 0.75rem;
+    padding: 0 2px 0 4px;
+    font-size: 0.74rem;
+    gap: 3px;
+  }
+
+  .plus {
+    width: 15px;
+    height: 15px;
   }
 }

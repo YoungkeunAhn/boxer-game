@@ -1,77 +1,35 @@
-/* TASK-015: 전투 컨트롤 레이아웃(AUTO·배속·수동). 하단에 배치, 모바일에서도 탭 영역 충분히. */
+/* 전투 컨트롤: 배속 토글 하나만(작은 칩). 무대 위 오버레이로 배치된다. */
 .controls {
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  background: rgba(23, 28, 40, 0.9);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+  justify-content: flex-end;
 }
 
-/* CombatStage 무대 위 오버레이(합성): 자체 박스 크롬 제거. 버튼 자체 크기/터치 영역은 그대로 유지. */
+/* CombatStage 무대 위 오버레이(합성): 자체 박스 크롬 제거. */
 .bare {
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
-  gap: 8px;
 }
 
-.row {
-  display: flex;
-  gap: 10px;
-}
-
-.toggle,
-.action {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 48px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
-  color: #cdd4e2;
-  background: #10141d;
+/* 배속 칩: 작고 컴팩트하게(반투명, 우측 정렬). */
+.speedToggle {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: #e7ebf3;
+  background: rgba(10, 13, 20, 0.7);
+  backdrop-filter: blur(2px);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.76rem;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.toggle:hover,
-.action:not(:disabled):hover {
+.speedToggle:hover {
   border-color: rgba(246, 187, 67, 0.6);
-}
-
-.toggleOn {
-  color: #10141d;
-  background: #f6bb43;
-  border-color: #f6bb43;
-}
-
-.action:disabled {
-  color: #5b6173;
-  background: #141925;
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.skill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.gauge {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #f6bb43;
-}
-
-.skill:disabled .gauge {
-  color: #5b6173;
 }

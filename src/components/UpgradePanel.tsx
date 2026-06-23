@@ -1,12 +1,59 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   calculateCombatStats,
   calculateUpgradeCost,
   isUpgradeAtMaxLevel,
 } from "../game/formulas";
 import type { Boxer, UpgradeKey } from "../game/types";
+import { formatCompactNumber } from "../game/format";
+import { UPGRADE_COIN, upgradeIconForKey } from "../data/assets";
 import { useGameStore } from "../stores/gameStore";
 import styles from "./GamePanel.module.css";
+
+// 강화 버튼을 길게 누르면 연속 강화. 첫 1회는 onClick(탭·키보드)이 처리하고,
+// 누르고 있는 동안 초기 지연 후 점점 빨라지며 반복한다.
+const HOLD_INITIAL_DELAY_MS = 350;
+const HOLD_START_INTERVAL_MS = 180;
+const HOLD_MIN_INTERVAL_MS = 50;
+const HOLD_ACCEL = 0.85;
+
+// 포인터를 누르는 동안 action을 반복 실행한다. 버튼 밖에서 손을 떼거나
+// 비활성화되어도 멈추도록 release는 window에서 듣는다.
+function useHoldRepeat(action: () => void) {
+  const actionRef = useRef(action);
+  actionRef.current = action;
+  const timerRef = useRef<number | null>(null);
+
+  const stop = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const start = useCallback(() => {
+    if (timerRef.current !== null) return; // 이미 진행 중
+    let interval = HOLD_START_INTERVAL_MS;
+    const tick = () => {
+      actionRef.current();
+      interval = Math.max(HOLD_MIN_INTERVAL_MS, interval * HOLD_ACCEL);
+      timerRef.current = window.setTimeout(tick, interval);
+    };
+    timerRef.current = window.setTimeout(tick, HOLD_INITIAL_DELAY_MS);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      stop();
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, [stop]);
+
+  return start;
+}
 
 type UpgradePanelProps = {
   boxer: Boxer;
@@ -15,7 +62,7 @@ type UpgradePanelProps = {
 const UPGRADE_LABELS: Record<UpgradeKey, { name: string; value: (boxer: Boxer) => string }> = {
   attackPower: {
     name: "공격력",
-    value: (boxer) => calculateCombatStats(boxer.upgradeLevels).attackPower.toLocaleString(),
+    value: (boxer) => formatCompactNumber(calculateCombatStats(boxer.upgradeLevels).attackPower),
   },
   attackSpeed: {
     name: "공격속도",
@@ -36,12 +83,12 @@ const UPGRADE_LABELS: Record<UpgradeKey, { name: string; value: (boxer: Boxer) =
   maxHp: {
     name: "체력",
     value: (boxer) =>
-      calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).maxHp.toLocaleString(),
+      formatCompactNumber(calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).maxHp),
   },
   defense: {
     name: "방어",
     value: (boxer) =>
-      calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).defense.toLocaleString(),
+      formatCompactNumber(calculateCombatStats(boxer.upgradeLevels, boxer.boxerType).defense),
   },
   dodge: {
     name: "회피",
@@ -89,7 +136,7 @@ function formatDelta(current: string, next: string | null): string | null {
   // 소수 자릿수는 다음값 표시 포맷을 따른다(예: 1.0회/초 → 0.1, 2.0배 → 0.2).
   const decimals = decimalPlaces(next);
   const suffix = unitSuffix(next);
-  const deltaText = decimals > 0 ? delta.toFixed(decimals) : Math.round(delta).toLocaleString();
+  const deltaText = decimals > 0 ? delta.toFixed(decimals) : formatCompactNumber(Math.round(delta));
   return `+${deltaText}${suffix}`;
 }
 
@@ -112,6 +159,98 @@ function unitSuffix(text: string): string {
   return text.replace(/^\+/, "").replace(/-?[\d,]+(?:\.\d+)?/, "").trim();
 }
 
+// 강화별 아이콘 폴백 이모지. 전용 아트(upgradeIconForKey)가 있으면 이미지가 우선한다.
+const UPGRADE_ICONS: Record<UpgradeKey, string> = {
+  attackPower: "🥊",
+  attackSpeed: "⚡",
+  critRate: "🎯",
+  critDamage: "💥",
+  goldBonus: "🪙",
+  maxHp: "❤️",
+  defense: "🛡️",
+  dodge: "💨",
+  counter: "↩️",
+};
+
+type UpgradeCardProps = {
+  boxer: Boxer;
+  upgradeKey: UpgradeKey;
+  onUpgrade: (key: UpgradeKey) => void;
+};
+
+// 카드 영역 전체가 강화 버튼이다(별도 버튼 없음 — 영역을 누르면 강화). 목업의 카드 그리드 구성.
+function UpgradeCard({ boxer, upgradeKey, onUpgrade }: UpgradeCardProps) {
+  const level = boxer.upgradeLevels[upgradeKey];
+  const cost = calculateUpgradeCost(upgradeKey, level);
+  const isMax = isUpgradeAtMaxLevel(upgradeKey, level);
+  const label = UPGRADE_LABELS[upgradeKey];
+  const currentValue = label.value(boxer);
+  const nextValue = isMax
+    ? null
+    : label.value({
+        ...boxer,
+        upgradeLevels: { ...boxer.upgradeLevels, [upgradeKey]: level + 1 },
+      });
+  const delta = formatDelta(currentValue, nextValue);
+  const disabled = isMax || boxer.gold < cost;
+  const iconSrc = upgradeIconForKey(upgradeKey);
+
+  // 길게 누르면 반복 강화. 첫 1회는 onClick이 처리한다(탭·키보드 모두 지원).
+  const startHold = useHoldRepeat(() => onUpgrade(upgradeKey));
+
+  const [pressed, setPressed] = useState(false);
+  const handlePointerDown = () => {
+    if (disabled) return;
+    setPressed(true);
+    startHold();
+  };
+
+  return (
+    <div className={styles.upgradeCell} data-testid={`upgrade-row-${upgradeKey}`}>
+      <button
+        className={`${styles.upgradeCard} ${pressed ? styles.upgradeButtonPressed : ""}`}
+        data-testid={`upgrade-button-${upgradeKey}`}
+        disabled={disabled}
+        type="button"
+        onClick={() => onUpgrade(upgradeKey)}
+        onPointerDown={handlePointerDown}
+        onAnimationEnd={() => setPressed(false)}
+      >
+        <span className={styles.upgradeCardName}>
+          {label.name} <small>Lv. {level}</small>
+        </span>
+        {iconSrc ? (
+          <img className={styles.upgradeCardIconImg} src={iconSrc} alt="" aria-hidden="true" />
+        ) : (
+          <span className={styles.upgradeCardIcon} aria-hidden="true">
+            {UPGRADE_ICONS[upgradeKey]}
+          </span>
+        )}
+        <span className={styles.upgradeCardValue}>
+          {/* 능력치 표시 앵커(stat-*): 현재값만 감싸 정확히 매칭(다음값 '→ N'은 바깥). */}
+          <span data-testid={`stat-${upgradeKey}`}>{currentValue}</span>{" "}
+          {nextValue ? `→ ${nextValue}` : "· MAX"}
+        </span>
+        {delta ? (
+          <span className={styles.upgradeDelta} data-testid={`upgrade-delta-${upgradeKey}`}>
+            {delta}
+          </span>
+        ) : null}
+        <span className={`${styles.upgradeCardCost} ${isMax ? styles.upgradeCardCostMax : ""}`}>
+          {isMax ? (
+            "MAX"
+          ) : (
+            <>
+              <img className={styles.upgradeCoin} src={UPGRADE_COIN} alt="" aria-hidden="true" />
+              {`${formatCompactNumber(cost)} G`}
+            </>
+          )}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export function UpgradePanel({ boxer }: UpgradePanelProps) {
   const upgrade = useGameStore((state) => state.upgrade);
   const [activeGroup, setActiveGroup] = useState<UpgradeGroup>("attack");
@@ -121,8 +260,8 @@ export function UpgradePanel({ boxer }: UpgradePanelProps) {
       <div className={styles.headingRow}>
         <div>
           <p className={styles.eyebrow}>POWER UP</p>
-          <h2 className={styles.title} id="upgrade-title">강화</h2>
-          <p className={styles.description}>몬스터를 쓰러뜨려 번 골드로 더 빠르게 강해지세요.</p>
+          {/* 제목 "강화"는 화면에서 숨기되(요청) 노드·id는 보존 — aria-labelledby·E2E(#upgrade-title toBeVisible)가 의존. */}
+          <h2 className={styles.srOnly} id="upgrade-title">강화</h2>
         </div>
       </div>
 
@@ -149,48 +288,13 @@ export function UpgradePanel({ boxer }: UpgradePanelProps) {
       {GROUP_TABS.map(({ group }) => (
         <div
           key={group}
-          className={styles.upgradeList}
+          className={styles.upgradeGrid}
           data-testid={`upgrade-group-${group}`}
           hidden={group !== activeGroup}
         >
-          {UPGRADE_GROUPS[group].map((key) => {
-            const level = boxer.upgradeLevels[key];
-            const cost = calculateUpgradeCost(key, level);
-            const isMax = isUpgradeAtMaxLevel(key, level);
-            const label = UPGRADE_LABELS[key];
-            const currentValue = label.value(boxer);
-            const nextValue = isMax
-              ? null
-              : label.value({
-                  ...boxer,
-                  upgradeLevels: { ...boxer.upgradeLevels, [key]: level + 1 },
-                });
-            const delta = formatDelta(currentValue, nextValue);
-            return (
-              <div className={styles.upgradeRow} key={key} data-testid={`upgrade-row-${key}`}>
-                <div>
-                  <strong>{label.name} <small>Lv. {level}</small></strong>
-                  <span>
-                    {currentValue} {nextValue ? `→ ${nextValue}` : "· MAX"}
-                  </span>
-                  {delta ? (
-                    <span className={styles.upgradeDelta} data-testid={`upgrade-delta-${key}`}>
-                      다음 레벨 {delta}
-                    </span>
-                  ) : null}
-                </div>
-                <button
-                  className={styles.upgradeButton}
-                  data-testid={`upgrade-button-${key}`}
-                  disabled={isMax || boxer.gold < cost}
-                  type="button"
-                  onClick={() => upgrade(key)}
-                >
-                  {isMax ? "MAX" : `${cost.toLocaleString()} G`}
-                </button>
-              </div>
-            );
-          })}
+          {UPGRADE_GROUPS[group].map((key) => (
+            <UpgradeCard key={key} boxer={boxer} upgradeKey={key} onUpgrade={upgrade} />
+          ))}
         </div>
       ))}
     </section>

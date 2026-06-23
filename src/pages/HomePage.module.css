@@ -1,12 +1,30 @@
+/* 고정 높이 셸: 페이지 자체는 스크롤하지 않는다(100dvh, overflow hidden).
+   상단 바·전투 무대는 자연 높이로 항상 고정 노출되고, 타입·강화(.tabScroll)만 내부에서 스크롤한다. */
 .page {
   display: flex;
-  width: min(100% - 32px, 960px);
+  width: 100%;
+  height: 100dvh;
   min-width: 0;
   flex-direction: column;
-  gap: 18px;
+  gap: 0;
   margin: 0 auto;
-  /* TASK-020(P3): 하단 고정 탭 바가 콘텐츠를 가리지 않도록 하단 패딩 확보(safe-area 포함). */
-  padding: 20px 0 calc(84px + env(safe-area-inset-bottom));
+  overflow: hidden;
+  /* 고정 탭 바(position:fixed)가 덮는 하단 영역만큼 비워, 스크롤 영역이 탭 바 '뒤'가 아니라 '위'에서 끝나게 한다. */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
+/* 셸의 직계 자식(상단 바·알림·전투 무대)은 압축하지 않고 자연 높이를 유지한다. 탭 바는 position:fixed라 플로우에서 빠진다. */
+.page > * {
+  flex: 0 0 auto;
+}
+
+/* 탭별 스크롤 영역: 남는 세로를 채우고(flex-grow) 내부에서만 스크롤한다(탭 바 클리어런스는 .page 하단 패딩이 처리). */
+.tabScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
 }
 
 .hero {
@@ -106,23 +124,12 @@
 }
 
 @media (max-width: 720px) {
-  .page {
-    width: min(100% - 24px, 960px);
-    padding-top: 28px;
-  }
-
   .hero {
     align-items: flex-start;
   }
 }
 
 @media (max-width: 420px) {
-  .page {
-    width: calc(100% - 16px);
-    /* 하단은 탭 바 클리어런스 유지(.page 기본값과 동일). */
-    padding: 14px 0 calc(84px + env(safe-area-inset-bottom));
-  }
-
   .hero {
     flex-direction: column;
     gap: 16px;
